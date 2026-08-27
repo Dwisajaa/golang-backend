@@ -14,7 +14,9 @@ import (
 	"github.com/Dwisajaa/golang-backend/internal/config"
 	"github.com/Dwisajaa/golang-backend/internal/db"
 	"github.com/Dwisajaa/golang-backend/internal/httphandler"
+	"github.com/Dwisajaa/golang-backend/internal/repository"
 	"github.com/Dwisajaa/golang-backend/internal/router"
+	"github.com/Dwisajaa/golang-backend/internal/service"
 )
 
 func main() {
@@ -40,7 +42,12 @@ func main() {
 
 	health := httphandler.NewHealthHandler()
 	ready := httphandler.NewReadyHandler(pool)
-	engine := router.New(logger, health, ready)
+
+	userRepo := repository.NewMySQLUserRepository(pool)
+	userService := service.NewUserService(userRepo)
+	users := httphandler.NewUserHandler(userService)
+
+	engine := router.New(logger, health, ready, users)
 
 	addr := ":" + strconv.Itoa(cfg.App.Port)
 	srv := &http.Server{

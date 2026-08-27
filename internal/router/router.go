@@ -11,7 +11,7 @@ import (
 // New assembles the Gin engine: global middleware then routes. It owns nothing
 // persistent; every dependency is passed in so tests can build a router from a
 // partial set of handlers.
-func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphandler.ReadyHandler) *gin.Engine {
+func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphandler.ReadyHandler, users *httphandler.UserHandler) *gin.Engine {
 	r := gin.New()
 
 	r.Use(gin.Recovery())
@@ -21,6 +21,9 @@ func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphand
 
 	r.GET("/health", health.Health)
 	r.GET("/ready", ready.Ready)
+
+	api := r.Group("/api")
+	api.GET("/users/:id", users.Get)
 
 	return r
 }
