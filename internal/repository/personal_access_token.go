@@ -11,4 +11,7 @@ type TokenStore interface {
 	Create(ctx context.Context, t *model.PersonalAccessToken) error
 	FindByTokenHash(ctx context.Context, tokenHash string) (*model.PersonalAccessToken, error)
 	RevokeByTokenHash(ctx context.Context, tokenHash string) error
+	// RevokeAllForUser deletes every token of a user (Laravel tokens()->delete()
+	// parity after a password change).
+	RevokeAllForUser(ctx context.Context, q Queryer, userID uint64) error
 }

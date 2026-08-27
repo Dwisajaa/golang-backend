@@ -35,6 +35,29 @@ func (r *MySQLUserRepository) UpdateVerified(ctx context.Context, q Queryer, id 
 	return err
 }
 
+// UpdateNameEmail updates the profile fields Laravel UpdateProfileRequest
+// allows. The caller passes the new email_verified_at (nil when email changed
+// — Laravel resets verification). A duplicate email maps to ErrDuplicateEmail.
+func (r *MySQLUserRepository) UpdateNameEmail(ctx context.Context, q Queryer, id uint64, name, email string, emailVerifiedAt *time.Time) error {
+	_, err := q.ExecContext(ctx,
+		"UPDATE users SET name = ?, email = ?, email_verified_at = ? WHERE id = ?",
+		name, email, emailVerifiedAt, id)
+	if err != nil {
+		if isDuplicate(err) {
+			return ErrDuplicateEmail
+		}
+		return err
+	}
+	return nil
+}
+
+// UpdatePassword writes a bcrypt hash (never plaintext); caller hashes.
+func (r *MySQLUserRepository) UpdatePassword(ctx context.Context, q Queryer, id uint64, passwordHash string) error {
+	_, err := q.ExecContext(ctx,
+		"UPDATE users SET password = ? WHERE id = ?", passwordHash, id)
+	return err
+}
+
 func nullTimePtr(t sql.NullTime) *time.Time {
 	if !t.Valid {
 		return nil

@@ -72,3 +72,12 @@ func (s *MySQLTokenStore) RevokeByTokenHash(ctx context.Context, tokenHash strin
 		"DELETE FROM personal_access_tokens WHERE token = ?", tokenHash)
 	return err
 }
+
+// RevokeAllForUser deletes every token for a user (morph pair), used after a
+// password change — Laravel $user->tokens()->delete().
+func (s *MySQLTokenStore) RevokeAllForUser(ctx context.Context, q Queryer, userID uint64) error {
+	_, err := q.ExecContext(ctx,
+		"DELETE FROM personal_access_tokens WHERE tokenable_type = ? AND tokenable_id = ?",
+		model.TokenableType, userID)
+	return err
+}

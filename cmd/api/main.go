@@ -76,7 +76,10 @@ func main() {
 	)
 	otpHandler := httphandler.NewOtpHandler(otpService)
 
-	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler)
+	profileService := service.NewProfileService(userRepo, tokenStore, db.NewTxManager(pool), hasher, otpService)
+	profileHandler := httphandler.NewProfileHandler(profileService)
+
+	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler)
 
 	addr := ":" + strconv.Itoa(cfg.App.Port)
 	srv := &http.Server{

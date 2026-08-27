@@ -26,8 +26,7 @@ func (r *MySQLUserRepository) Create(ctx context.Context, u *model.User) error {
 		"INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)",
 		u.Name, u.Email, u.Password, u.Role)
 	if err != nil {
-		var myErr *mysql.MySQLError
-		if errors.As(err, &myErr) && myErr.Number == 1062 {
+		if isDuplicate(err) {
 			return ErrDuplicateEmail
 		}
 		return err
@@ -40,6 +39,13 @@ func (r *MySQLUserRepository) Create(ctx context.Context, u *model.User) error {
 	u.CreatedAt = nownil()
 	u.UpdatedAt = nownil()
 	return nil
+}
+
+// isDuplicate reports a MySQL 1062 (unique constraint violation), translated
+// away from the driver so callers never see driver types.
+func isDuplicate(err error) bool {
+	var myErr *mysql.MySQLError
+	return errors.As(err, &myErr) && myErr.Number == 1062
 }
 
 type rowScanner interface {
