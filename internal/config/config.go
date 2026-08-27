@@ -13,6 +13,8 @@ import (
 type Config struct {
 	App      AppConfig
 	Database DatabaseConfig
+	Mail     MailConfig
+	Otp      OtpConfig
 }
 
 type AppConfig struct {
@@ -28,10 +30,30 @@ type DatabaseConfig struct {
 	Password string
 }
 
+// MailConfig drives the SMTP mailer. When SMTPHost is empty the app falls back
+// to a log mailer (Laravel MAIL_MAILER=log parity for local dev).
+type MailConfig struct {
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUsername string
+	SMTPPassword string
+	FromAddress  string
+	FromName     string
+}
+
+// OtpConfig mirrors Laravel config('auth.otp_expiration')/('otp_max_attempts').
+type OtpConfig struct {
+	ExpirationMinutes int
+	MaxAttempts       int
+}
+
 const (
-	defaultAppPort = 8080
-	defaultDBPort  = 3306
-	defaultAppEnv  = "development"
+	defaultAppPort     = 8080
+	defaultDBPort      = 3306
+	defaultAppEnv      = "development"
+	defaultSMTPPort    = 587
+	defaultOtpExpiry   = 10
+	defaultOtpAttempts = 5
 )
 
 // Load reads environment variables and returns a validated Config. Required
@@ -47,6 +69,19 @@ func Load(getenv func(string) string) (*Config, error) {
 		return nil, err
 	}
 
+	smtpPort, err := envInt(getenv("SMTP_PORT"), defaultSMTPPort, "SMTP_PORT")
+	if err != nil {
+		return nil, err
+	}
+	otpExpiry, err := envInt(getenv("OTP_EXPIRATION_MINUTES"), defaultOtpExpiry, "OTP_EXPIRATION_MINUTES")
+	if err != nil {
+		return nil, err
+	}
+	otpAttempts, err := envInt(getenv("OTP_MAX_ATTEMPTS"), defaultOtpAttempts, "OTP_MAX_ATTEMPTS")
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := &Config{
 		App: AppConfig{
 			Env:  firstNonEmpty(getenv("APP_ENV"), defaultAppEnv),
@@ -58,6 +93,18 @@ func Load(getenv func(string) string) (*Config, error) {
 			Name:     getenv("DATABASE_NAME"),
 			User:     getenv("DATABASE_USER"),
 			Password: getenv("DATABASE_PASSWORD"),
+		},
+		Mail: MailConfig{
+			SMTPHost:     getenv("SMTP_HOST"),
+			SMTPPort:     smtpPort,
+			SMTPUsername: getenv("SMTP_USERNAME"),
+			SMTPPassword: getenv("SMTP_PASSWORD"),
+			FromAddress:  getenv("SMTP_FROM_ADDRESS"),
+			FromName:     firstNonEmpty(getenv("SMTP_FROM_NAME"), "api-dwidev"),
+		},
+		Otp: OtpConfig{
+			ExpirationMinutes: otpExpiry,
+			MaxAttempts:       otpAttempts,
 		},
 	}
 

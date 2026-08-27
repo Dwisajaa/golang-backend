@@ -52,6 +52,12 @@ func Validation(errors map[string][]string) *Error {
 	return &Error{Kind: KindValidation, Message: "The given data was invalid.", Errors: errors}
 }
 
+// Unprocessable is a plain 422 with a custom message (Laravel controllers that
+// return response()->json([...], 422) directly).
+func Unprocessable(msg string) *Error { return &Error{Kind: KindValidation, Message: msg} }
+
+func TooManyRequests(msg string) *Error { return &Error{Kind: KindTooManyRequests, Message: msg} }
+
 // As extracts an *Error from err, or nil when err is nil or of another type.
 func As(err error) *Error {
 	if err == nil {
