@@ -6,8 +6,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
-
 	"github.com/Dwisajaa/golang-backend/internal/model"
 )
 
@@ -39,13 +37,6 @@ func (r *MySQLUserRepository) Create(ctx context.Context, u *model.User) error {
 	u.CreatedAt = nownil()
 	u.UpdatedAt = nownil()
 	return nil
-}
-
-// isDuplicate reports a MySQL 1062 (unique constraint violation), translated
-// away from the driver so callers never see driver types.
-func isDuplicate(err error) bool {
-	var myErr *mysql.MySQLError
-	return errors.As(err, &myErr) && myErr.Number == 1062
 }
 
 type rowScanner interface {
