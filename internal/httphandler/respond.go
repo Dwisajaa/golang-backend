@@ -17,7 +17,11 @@ func respondError(c *gin.Context, err error) {
 	status := httperr.Status(err)
 	body := gin.H{"message": "Server error."}
 	if he != nil {
-		body = gin.H{"message": he.Message}
+		if he.Kind == httperr.KindValidation && he.Errors != nil {
+			body = gin.H{"message": he.Message, "errors": he.Errors}
+		} else {
+			body = gin.H{"message": he.Message}
+		}
 	}
 
 	if status >= 500 {

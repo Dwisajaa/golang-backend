@@ -11,9 +11,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Dwisajaa/golang-backend/internal/auth"
 	"github.com/Dwisajaa/golang-backend/internal/config"
 	"github.com/Dwisajaa/golang-backend/internal/db"
 	"github.com/Dwisajaa/golang-backend/internal/httphandler"
+	"github.com/Dwisajaa/golang-backend/internal/middleware"
 	"github.com/Dwisajaa/golang-backend/internal/repository"
 	"github.com/Dwisajaa/golang-backend/internal/router"
 	"github.com/Dwisajaa/golang-backend/internal/service"
@@ -47,7 +49,14 @@ func main() {
 	userService := service.NewUserService(userRepo)
 	users := httphandler.NewUserHandler(userService)
 
-	engine := router.New(logger, health, ready, users)
+	tokenStore := repository.NewMySQLTokenStore(pool)
+	tokenGen := auth.NewRandomTokenGenerator()
+	authService := service.NewAuthService(userRepo, tokenStore, auth.NewBcryptHasher(), tokenGen)
+	authHandler := httphandler.NewAuthHandler(authService)
+
+	authMW := middleware.Auth(tokenStore, userRepo, tokenGen)
+
+	engine := router.New(logger, health, ready, users, authHandler, authMW)
 
 	addr := ":" + strconv.Itoa(cfg.App.Port)
 	srv := &http.Server{

@@ -24,7 +24,8 @@ const (
 type Error struct {
 	Kind    Kind
 	Message string
-	Err     error // optional underlying error, logged, never sent to client
+	Errors  map[string][]string // for KindValidation, mirrors Laravel's errors map
+	Err     error               // optional underlying error, logged, never sent to client
 }
 
 func (e *Error) Error() string {
@@ -43,6 +44,13 @@ func Internal(err error) *Error {
 func BadRequest(msg string) *Error   { return &Error{Kind: KindBadRequest, Message: msg} }
 func Unauthorized(msg string) *Error { return &Error{Kind: KindUnauthorized, Message: msg} }
 func Forbidden(msg string) *Error    { return &Error{Kind: KindForbidden, Message: msg} }
+
+// Validation builds the exact 422 shape Laravel produces:
+//
+//	{"message":"The given data was invalid.","errors":{field:[messages]}}
+func Validation(errors map[string][]string) *Error {
+	return &Error{Kind: KindValidation, Message: "The given data was invalid.", Errors: errors}
+}
 
 // As extracts an *Error from err, or nil when err is nil or of another type.
 func As(err error) *Error {

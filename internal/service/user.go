@@ -9,14 +9,19 @@ import (
 	"github.com/Dwisajaa/golang-backend/internal/repository"
 )
 
+// UserReader is the read surface UserService depends on.
+type UserReader interface {
+	FindByID(ctx context.Context, id uint64) (*model.User, error)
+}
+
 // UserService owns the read user business rules. It knows nothing about HTTP:
 // no gin, no JSON, no status codes. Errors are typed (httperr) so the handler
 // layer can map them.
 type UserService struct {
-	users repository.UserRepository
+	users UserReader
 }
 
-func NewUserService(users repository.UserRepository) *UserService {
+func NewUserService(users UserReader) *UserService {
 	return &UserService{users: users}
 }
 
