@@ -31,6 +31,23 @@ var (
 
 // classifyServiceCategoryDuplicate maps a 1062 key to the matching sentinel
 // (or a generic ErrDuplicate when the key is unknown).
+// classifyServiceDuplicate maps a 1062 key to the matching sentinel for the
+// services table (or a generic ErrDuplicate).
+func classifyServiceDuplicate(err error) error {
+	key, ok := duplicateTarget(err)
+	if !ok {
+		return err
+	}
+	switch {
+	case key == "services_name_unique":
+		return ErrDuplicateName
+	case key == "services_slug_unique":
+		return ErrDuplicateSlug
+	default:
+		return ErrDuplicate
+	}
+}
+
 func classifyServiceCategoryDuplicate(err error) error {
 	key, ok := duplicateTarget(err)
 	if !ok {

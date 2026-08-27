@@ -88,7 +88,11 @@ func main() {
 	categoryService := service.NewServiceCategoryService(repository.NewMySQLServiceCategoryStore(), db.NewTxManager(pool))
 	categoryHandler := httphandler.NewServiceCategoryHandler(categoryService)
 
-	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler)
+	serviceStore := repository.NewMySQLServiceStore()
+	serviceService := service.NewServiceService(serviceStore, db.NewTxManager(pool))
+	serviceHandler := httphandler.NewServiceHandler(serviceService)
+
+	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler, serviceHandler)
 
 	addr := ":" + strconv.Itoa(cfg.App.Port)
 	srv := &http.Server{
