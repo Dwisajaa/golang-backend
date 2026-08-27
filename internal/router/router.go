@@ -6,12 +6,13 @@ import (
 
 	"github.com/Dwisajaa/golang-backend/internal/httphandler"
 	"github.com/Dwisajaa/golang-backend/internal/middleware"
+	"github.com/Dwisajaa/golang-backend/internal/model"
 )
 
 // New assembles the Gin engine: global middleware then routes. It owns nothing
 // persistent; every dependency is passed in so tests can build a router from a
 // partial set of handlers.
-func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphandler.ReadyHandler, users *httphandler.UserHandler, auth *httphandler.AuthHandler, authMW gin.HandlerFunc, otp *httphandler.OtpHandler, profile *httphandler.ProfileHandler) *gin.Engine {
+func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphandler.ReadyHandler, users *httphandler.UserHandler, auth *httphandler.AuthHandler, authMW gin.HandlerFunc, otp *httphandler.OtpHandler, profile *httphandler.ProfileHandler, customerProfile *httphandler.CustomerProfileHandler) *gin.Engine {
 	r := gin.New()
 
 	r.Use(gin.Recovery())
@@ -35,6 +36,13 @@ func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphand
 	protected.GET("/profile", profile.Get)
 	protected.PUT("/profile", profile.Update)
 	protected.PUT("/profile/password", profile.UpdatePassword)
+
+	// role:customer group mirrors Laravel's role:customer route group.
+	customer := api.Group("")
+	customer.Use(authMW)
+	customer.Use(middleware.RequireRole(model.RoleCustomer))
+	customer.GET("/customer-profile", customerProfile.Get)
+	customer.PUT("/customer-profile", customerProfile.Update)
 
 	return r
 }
