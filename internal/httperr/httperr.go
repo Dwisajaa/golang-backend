@@ -58,6 +58,8 @@ func Unprocessable(msg string) *Error { return &Error{Kind: KindValidation, Mess
 
 func TooManyRequests(msg string) *Error { return &Error{Kind: KindTooManyRequests, Message: msg} }
 
+func Conflict(msg string) *Error { return &Error{Kind: KindConflict, Message: msg} }
+
 // As extracts an *Error from err, or nil when err is nil or of another type.
 func As(err error) *Error {
 	if err == nil {

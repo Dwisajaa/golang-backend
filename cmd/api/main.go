@@ -85,7 +85,10 @@ func main() {
 	techProfileService := service.NewTechnicianProfileService(repository.NewMySQLTechnicianProfileStore(), db.NewTxManager(pool))
 	techProfileHandler := httphandler.NewTechnicianProfileHandler(techProfileService)
 
-	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler)
+	categoryService := service.NewServiceCategoryService(repository.NewMySQLServiceCategoryStore(), db.NewTxManager(pool))
+	categoryHandler := httphandler.NewServiceCategoryHandler(categoryService)
+
+	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler)
 
 	addr := ":" + strconv.Itoa(cfg.App.Port)
 	srv := &http.Server{

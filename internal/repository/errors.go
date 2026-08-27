@@ -22,6 +22,30 @@ var ErrDuplicate = errors.New("repository: duplicate row")
 // ErrDuplicateTechnicianCode is the unique violation on technician_code.
 var ErrDuplicateTechnicianCode = errors.New("repository: duplicate technician code")
 
+// ErrDuplicateName / ErrDuplicateSlug classify service_categories unique
+// violations so the service can produce field-specific 422 messages.
+var (
+	ErrDuplicateName = errors.New("repository: duplicate name")
+	ErrDuplicateSlug = errors.New("repository: duplicate slug")
+)
+
+// classifyServiceCategoryDuplicate maps a 1062 key to the matching sentinel
+// (or a generic ErrDuplicate when the key is unknown).
+func classifyServiceCategoryDuplicate(err error) error {
+	key, ok := duplicateTarget(err)
+	if !ok {
+		return err
+	}
+	switch {
+	case key == "service_categories_name_unique":
+		return ErrDuplicateName
+	case key == "service_categories_slug_unique":
+		return ErrDuplicateSlug
+	default:
+		return ErrDuplicate
+	}
+}
+
 // duplicateTarget reports the colliding unique key name for a MySQL 1062 error
 // (e.g. "technician_code" / "users.email"). Returns false for other errors.
 func duplicateTarget(err error) (string, bool) {
