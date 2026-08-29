@@ -92,7 +92,11 @@ func main() {
 	serviceService := service.NewServiceService(serviceStore, db.NewTxManager(pool))
 	serviceHandler := httphandler.NewServiceHandler(serviceService)
 
-	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler, serviceHandler)
+	packageStore := repository.NewMySQLPackageStore()
+	packageService := service.NewPackageService(packageStore, serviceStore, db.NewTxManager(pool))
+	packageHandler := httphandler.NewPackageHandler(packageService)
+
+	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler, serviceHandler, packageHandler)
 
 	addr := ":" + strconv.Itoa(cfg.App.Port)
 	srv := &http.Server{

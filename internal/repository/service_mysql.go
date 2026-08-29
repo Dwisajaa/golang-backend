@@ -304,6 +304,26 @@ func (r *MySQLServiceStore) Delete(ctx context.Context, q Queryer, id uint64) er
 	return nil
 }
 
+// ServiceIDsExist verifies all given service IDs exist in the services table;
+// used by PackageService to validate items.*.service_id before creating items.
+func (r *MySQLServiceStore) ServiceIDsExist(ctx context.Context, q Queryer, ids []uint64) (bool, error) {
+	if len(ids) == 0 {
+		return true, nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	var n int
+	err := q.QueryRowContext(ctx,
+		"SELECT COUNT(DISTINCT id) FROM services WHERE id IN ("+placeholders+")", args...).Scan(&n)
+	if err != nil {
+		return false, err
+	}
+	return n == len(ids), nil
+}
+
 func fmtCents(cents int64) string {
 	neg := ""
 	if cents < 0 {

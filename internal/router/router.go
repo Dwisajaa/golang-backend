@@ -12,7 +12,7 @@ import (
 // New assembles the Gin engine: global middleware then routes. It owns nothing
 // persistent; every dependency is passed in so tests can build a router from a
 // partial set of handlers.
-func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphandler.ReadyHandler, users *httphandler.UserHandler, auth *httphandler.AuthHandler, authMW gin.HandlerFunc, otp *httphandler.OtpHandler, profile *httphandler.ProfileHandler, customerProfile *httphandler.CustomerProfileHandler, techProfile *httphandler.TechnicianProfileHandler, categories *httphandler.ServiceCategoryHandler, services *httphandler.ServiceHandler) *gin.Engine {
+func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphandler.ReadyHandler, users *httphandler.UserHandler, auth *httphandler.AuthHandler, authMW gin.HandlerFunc, otp *httphandler.OtpHandler, profile *httphandler.ProfileHandler, customerProfile *httphandler.CustomerProfileHandler, techProfile *httphandler.TechnicianProfileHandler, categories *httphandler.ServiceCategoryHandler, services *httphandler.ServiceHandler, packages *httphandler.PackageHandler) *gin.Engine {
 	r := gin.New()
 
 	r.Use(gin.Recovery())
@@ -32,6 +32,8 @@ func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphand
 	api.GET("/categories", categories.List)
 	api.GET("/services", services.List)
 	api.GET("/services/:id", services.Get)
+	api.GET("/packages", packages.List)
+	api.GET("/packages/:id", packages.Get)
 
 	protected := api.Group("")
 	protected.Use(authMW)
@@ -64,6 +66,9 @@ func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphand
 	admin.POST("/admin/services", services.Store)
 	admin.PUT("/admin/services/:id", services.Update)
 	admin.DELETE("/admin/services/:id", services.Destroy)
+	admin.POST("/admin/packages", packages.Store)
+	admin.PUT("/admin/packages/:id", packages.Update)
+	admin.DELETE("/admin/packages/:id", packages.Destroy)
 
 	return r
 }
