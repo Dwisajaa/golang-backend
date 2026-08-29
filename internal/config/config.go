@@ -15,6 +15,7 @@ type Config struct {
 	Database DatabaseConfig
 	Mail     MailConfig
 	Otp      OtpConfig
+	Storage  StorageConfig
 }
 
 type AppConfig struct {
@@ -47,6 +48,11 @@ type OtpConfig struct {
 	MaxAttempts       int
 }
 
+// StorageConfig locates private file storage (payment proofs).
+type StorageConfig struct {
+	PaymentProofsPath string
+}
+
 const (
 	defaultAppPort     = 8080
 	defaultDBPort      = 3306
@@ -54,6 +60,7 @@ const (
 	defaultSMTPPort    = 587
 	defaultOtpExpiry   = 10
 	defaultOtpAttempts = 5
+	defaultProofPath   = "storage/app/private/payment-proofs"
 )
 
 // Load reads environment variables and returns a validated Config. Required
@@ -105,6 +112,9 @@ func Load(getenv func(string) string) (*Config, error) {
 		Otp: OtpConfig{
 			ExpirationMinutes: otpExpiry,
 			MaxAttempts:       otpAttempts,
+		},
+		Storage: StorageConfig{
+			PaymentProofsPath: firstNonEmpty(getenv("STORAGE_PAYMENT_PROOFS_PATH"), defaultProofPath),
 		},
 	}
 

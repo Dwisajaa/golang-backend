@@ -20,6 +20,7 @@ import (
 	"github.com/Dwisajaa/golang-backend/internal/repository"
 	"github.com/Dwisajaa/golang-backend/internal/router"
 	"github.com/Dwisajaa/golang-backend/internal/service"
+	"github.com/Dwisajaa/golang-backend/internal/storage"
 )
 
 func main() {
@@ -107,7 +108,11 @@ func main() {
 	invoiceService := service.NewInvoiceService(invoiceStore, db.NewTxManager(pool))
 	invoiceHandler := httphandler.NewInvoiceHandler(invoiceService)
 
-	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler, serviceHandler, packageHandler, bookingHandler, invoiceHandler)
+	proofStorage := storage.NewLocalStorage(cfg.Storage.PaymentProofsPath)
+	paymentService := service.NewPaymentService(repository.NewMySQLPaymentStore(), proofStorage, db.NewTxManager(pool))
+	paymentHandler := httphandler.NewPaymentHandler(paymentService, proofStorage)
+
+	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler, serviceHandler, packageHandler, bookingHandler, invoiceHandler, paymentHandler)
 
 	addr := ":" + strconv.Itoa(cfg.App.Port)
 	srv := &http.Server{
