@@ -83,28 +83,4 @@ type BookingItem struct {
 	UpdatedAt      *time.Time
 }
 
-// Invoice is the MINIMAL model for the booking-creation side-effect. Full
-// Invoice domain (endpoints, payment integration) is deferred to a later phase.
-type Invoice struct {
-	ID                  uint64
-	BookingID           uint64
-	InvoiceNumber       string
-	IssuedAt            *time.Time
-	DueAt               *time.Time
-	SubtotalCents       int64
-	AdditionalCostCents int64
-	TotalAmountCents    int64
-	Status              string
-	Notes               *string
-	CreatedAt           *time.Time
-	UpdatedAt           *time.Time
-}
-
-// Invoice status constants (minimal set needed for booking side-effect).
-const (
-	InvoiceStatusUnpaid    = "unpaid"
-	InvoiceStatusCancelled = "cancelled"
-)
-
-// InvoiceCodePrefix for generateInvoiceNumber.
-const InvoiceCodePrefix = "INV-"
+// Invoice is declared in invoice.go (same package).

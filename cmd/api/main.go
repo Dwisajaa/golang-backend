@@ -103,7 +103,11 @@ func main() {
 	)
 	bookingHandler := httphandler.NewBookingHandler(bookingService)
 
-	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler, serviceHandler, packageHandler, bookingHandler)
+	invoiceStore := repository.NewMySQLInvoiceStore()
+	invoiceService := service.NewInvoiceService(invoiceStore, db.NewTxManager(pool))
+	invoiceHandler := httphandler.NewInvoiceHandler(invoiceService)
+
+	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler, serviceHandler, packageHandler, bookingHandler, invoiceHandler)
 
 	addr := ":" + strconv.Itoa(cfg.App.Port)
 	srv := &http.Server{
