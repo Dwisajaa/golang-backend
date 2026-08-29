@@ -132,3 +132,86 @@ func TestMySQLAssignment_Coverage(t *testing.T) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }
+
+// TestMySQLAssignment_Workflow covers the technician workflow state writes
+// (accept/reject/start/complete + booking cascade) against MySQL. Gated.
+func TestMySQLAssignment_Workflow(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set; repository integration requires a disposable MySQL test database")
+	}
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+
+	// tables created by TestMySQLAssignment_Coverage; ensure independently
+	for _, ddl := range []string{
+		`CREATE TABLE IF NOT EXISTS bookings (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, booking_code VARCHAR(255) NOT NULL, customer_id BIGINT UNSIGNED NOT NULL, booking_date DATE NOT NULL, booking_time VARCHAR(255) NOT NULL, address VARCHAR(255) NOT NULL, status VARCHAR(255) NOT NULL DEFAULT 'pending_payment', created_at TIMESTAMP NULL, updated_at TIMESTAMP NULL, PRIMARY KEY (id)) ENGINE=InnoDB`,
+		`CREATE TABLE IF NOT EXISTS invoices (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, booking_id BIGINT UNSIGNED NOT NULL, invoice_number VARCHAR(255) NOT NULL, status VARCHAR(255) NOT NULL DEFAULT 'unpaid', created_at TIMESTAMP NULL, updated_at TIMESTAMP NULL, PRIMARY KEY (id)) ENGINE=InnoDB`,
+		`CREATE TABLE IF NOT EXISTS booking_assignments (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, booking_id BIGINT UNSIGNED NOT NULL, technician_id BIGINT UNSIGNED NOT NULL, assigned_by BIGINT UNSIGNED NULL, assigned_at TIMESTAMP NULL, accepted_at TIMESTAMP NULL, rejected_at TIMESTAMP NULL, started_at TIMESTAMP NULL, completed_at TIMESTAMP NULL, status VARCHAR(20) NOT NULL DEFAULT 'pending', rejection_reason TEXT NULL, technician_note TEXT NULL, admin_verification_note TEXT NULL, created_at TIMESTAMP NULL, updated_at TIMESTAMP NULL, PRIMARY KEY (id)) ENGINE=InnoDB`,
+	} {
+		if _, err := db.ExecContext(ctx, ddl); err != nil {
+			t.Fatalf("ensure: %v", err)
+		}
+	}
+	if _, err := db.ExecContext(ctx, "INSERT INTO bookings (id, booking_code, customer_id, booking_date, address, status) VALUES (2,'BJA-W',7,'2026-12-01','x','technician_assigned')"); err != nil {
+		t.Fatalf("seed booking: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, "INSERT INTO invoices (id, booking_id, invoice_number, status) VALUES (2,2,'INV-W','paid')"); err != nil {
+		t.Fatalf("seed invoice: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, "INSERT INTO booking_assignments (id, booking_id, technician_id, assigned_by, assigned_at, status) VALUES (5,2,9,2,NOW(),'pending')"); err != nil {
+		t.Fatalf("seed assignment: %v", err)
+	}
+
+	store := NewMySQLAssignmentStore()
+	now := time.Now().UTC()
+
+	// accept
+	if err := store.MarkAccepted(ctx, db, 5, now); err != nil {
+		t.Fatalf("accept: %v", err)
+	}
+	a, err := store.FetchByID(ctx, db, 5)
+	if err != nil || a.Status != model.AssignmentStatusAccepted || a.AcceptedAt == nil {
+		t.Fatalf("after accept: %+v err=%v", a, err)
+	}
+
+	// start (booking technician_assigned → in_progress)
+	if err := store.MarkStarted(ctx, db, 5, now); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if err := store.UpdateBookingStatus(ctx, db, 2, model.BookingStatusInProgress); err != nil {
+		t.Fatalf("booking start: %v", err)
+	}
+	a, _ = store.FetchByID(ctx, db, 5)
+	if a.StartedAt == nil {
+		t.Fatal("started_at missing")
+	}
+
+	// complete
+	if err := store.MarkCompleted(ctx, db, 5, now, "done"); err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+	if err := store.UpdateBookingStatus(ctx, db, 2, model.BookingStatusAwaitingVerification); err != nil {
+		t.Fatalf("booking complete: %v", err)
+	}
+	a, _ = store.FetchByID(ctx, db, 5)
+	if a.Status != model.AssignmentStatusCompleted || a.CompletedAt == nil || a.TechnicianNote == nil {
+		t.Fatalf("after complete: %+v", a)
+	}
+
+	// reject path (fresh pending)
+	if _, err := db.ExecContext(ctx, "INSERT INTO booking_assignments (id, booking_id, technician_id, assigned_by, assigned_at, status) VALUES (6,2,9,2,NOW(),'pending')"); err != nil {
+		t.Fatalf("seed 2nd: %v", err)
+	}
+	if err := store.MarkRejected(ctx, db, 6, now, "Jadwal bentrok"); err != nil {
+		t.Fatalf("reject: %v", err)
+	}
+	a, _ = store.FetchByID(ctx, db, 6)
+	if a.Status != model.AssignmentStatusRejected || a.RejectionReason == nil || *a.RejectionReason != "Jadwal bentrok" {
+		t.Fatalf("after reject: %+v", a)
+	}
+}

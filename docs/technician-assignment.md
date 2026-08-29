@@ -124,3 +124,88 @@ business rules centralized in service; eligibility from joined profile;
 typed domain errors; interface-based repository + DI; batch response loading
 (no N+1); state constants instead of scattered strings; side-effect after
 commit (notification DEFERRED); composition-root wiring.
+
+---
+
+# Technician Workflow (FASE 12B)
+
+## Laravel Audit
+**Endpoints (technician role, all under `role:technician`):**
+
+| Method | Path | Role | Purpose |
+|---|---|---|---|
+| GET | `/api/technician/jobs` | technician | own assignments, booking.items/customer/invoice, per_page |
+| GET | `/api/technician/jobs/{assignment}` | technician | policy `act` (owner) → detail |
+| POST | `/api/technician/jobs/{assignment}/accept` | technician | pending → accepted |
+| POST | `/api/technician/jobs/{assignment}/reject` | technician | pending → rejected (+ booking revert) |
+| POST | `/api/technician/jobs/{assignment}/start` | technician | accepted + start → booking in_progress |
+| POST | `/api/technician/jobs/{assignment}/complete` | technician | accepted + started → completed |
+
+### Accept
+tx{ lock assignment FOR UPDATE (with booking+invoice) → owner → status==pending
+else 422 `"Assignment is not in the required state."` → invoice==paid &&
+booking==technician_assigned else 422 `"Booking is not ready for acceptance."`
+→ status=accepted, accepted_at=now } → notification (DEFERRED) → 200
+`"Assignment accepted successfully."`
+
+### Reject
+RejectAssignmentRequest: `rejection_reason` required `in[Tidak tersedia,
+Jadwal bentrok, Lokasi terlalu jauh, Masalah teknis, Lainnya]`; detail nullable
+max500 → tx{ lock → owner → pending → reason = reason [+ " - " + detail] →
+rejected + rejected_at → if booking==technician_assigned transitionTo(confirmed)
+} → 200 `"Assignment rejected successfully."`
+
+### Start
+tx{ lock → owner → accepted → if started_at || booking!=technician_assigned →
+422 `"Assignment cannot be started in its current state."` → started_at=now +
+technician_note="Job started." → booking transitionTo(in_progress) } → 200
+`"Job started successfully."`
+
+### Complete
+CompleteJobRequest: `technician_note` required max2000 → tx{ lock → owner →
+accepted → if !started_at || booking!=in_progress → 422 `"Job must be started
+before completion."` → completed + completed_at + note → booking
+transitionTo(awaiting_verification) } → 200 `"Job completed and awaiting
+verification."`
+
+## State / Idempotency
+Assignment states: pending → accepted/rejected → (start) → complete. Status
+checks reuse the same `"Assignment is not in the required state."` on repeat
+actions (idempotency = Laravel parity: second accept fails 422). Booking
+transitions validated via `model.CanTransition` (existing state machine).
+
+## Locking & Concurrency
+Technician workflow locks **only the assignment row** (Laravel parity — the
+booking/invoice are read without FOR UPDATE). Lock order is canonical:
+assignment-first in workflow; booking-first in admin-assign; no cycle since
+each path locks only one side. Concurrent accepts serialize on the assignment
+row → exactly one succeeds (unit race test emulates FOR UPDATE; MySQL
+integration covers real transitions).
+
+## Repository
+Extended `AssignmentStore`: FindWorkForUpdate (assignment FOR UPDATE + booking +
+invoice), FetchByID, CountByTechnician/ListByTechnician (with booking+items+
+customer+invoice batch), MarkAccepted/Rejected/Started/Completed.
+
+## Service
+`AssignmentService`: ListJobs, ShowJob (owner check), Accept, Reject, Start,
+Complete — each with ownership → state → business guard → transition → booking
+cascade inside one `TxManager` transaction. Reject merges reason+detail.
+
+## Parity
+
+| Item | Status |
+|---|---|
+| 6 endpoints / method / role technician | MATCH |
+| State guards (messages verbatim) | MATCH |
+| Accept readiness (invoice paid + booking assigned) | MATCH |
+| Reject reason enum + detail merge | MATCH |
+| Start started_at + "Job started." | MATCH |
+| Complete note + booking awaiting_verification | MATCH |
+| Repeat-action 422 (idempotency) | MATCH |
+| Notifications | DEFERRED |
+
+## Known Limitations
+Notification dispatch DEFERRED (accept/reject/start/complete); review
+availability after completion DEFERRED (Review domain); environmental OOM
+during race builds (GOMAXPROCS=1 used).

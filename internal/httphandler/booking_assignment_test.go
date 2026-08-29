@@ -13,6 +13,7 @@ import (
 	"github.com/Dwisajaa/golang-backend/internal/httperr"
 	"github.com/Dwisajaa/golang-backend/internal/middleware"
 	"github.com/Dwisajaa/golang-backend/internal/model"
+	"github.com/Dwisajaa/golang-backend/internal/service"
 )
 
 type stubAssignSvc struct {
@@ -128,4 +129,41 @@ func TestAssignInternalError(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d", rec.Code)
 	}
+}
+
+func (s *stubAssignSvc) ListJobs(ctx context.Context, techID uint64, page, perPage int) (*service.JobList, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return &service.JobList{Total: 0, Page: 1, PerPage: 15}, nil
+}
+func (s *stubAssignSvc) ShowJob(ctx context.Context, techID, id uint64) (*model.BookingAssignment, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.a, nil
+}
+func (s *stubAssignSvc) Accept(ctx context.Context, techID, id uint64) (*model.BookingAssignment, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.a, nil
+}
+func (s *stubAssignSvc) Reject(ctx context.Context, techID, id uint64, reason, detail string) (*model.BookingAssignment, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.a, nil
+}
+func (s *stubAssignSvc) Start(ctx context.Context, techID, id uint64) (*model.BookingAssignment, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.a, nil
+}
+func (s *stubAssignSvc) Complete(ctx context.Context, techID, id uint64, note string) (*model.BookingAssignment, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.a, nil
 }

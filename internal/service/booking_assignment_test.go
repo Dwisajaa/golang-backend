@@ -283,3 +283,118 @@ func (s *serAssignStore) UpdateBookingStatus(ctx context.Context, q repository.Q
 func (s *serAssignStore) LoadBookingForResponse(ctx context.Context, q repository.Queryer, bookingID uint64) (*model.Booking, error) {
 	return s.inner.LoadBookingForResponse(ctx, q, bookingID)
 }
+
+// -- workflow interface methods --
+func (f *fakeAssignStore) FindWorkForUpdate(ctx context.Context, q repository.Queryer, id uint64) (*model.BookingAssignment, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	a, ok := f.assigns[id]
+	if !ok {
+		return nil, repository.ErrNotFound
+	}
+	cp := *a
+	if b, ok := f.bookings[cp.BookingID]; ok {
+		bc := *b
+		cp.Booking = &bc
+	}
+	return &cp, nil
+}
+func (f *fakeAssignStore) FetchByID(ctx context.Context, q repository.Queryer, id uint64) (*model.BookingAssignment, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	a, ok := f.assigns[id]
+	if !ok {
+		return nil, repository.ErrNotFound
+	}
+	return a, nil
+}
+func (f *fakeAssignStore) CountByTechnician(ctx context.Context, q repository.Queryer, techID uint64) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, a := range f.assigns {
+		if a.TechnicianID == techID {
+			n++
+		}
+	}
+	return n, nil
+}
+func (f *fakeAssignStore) ListByTechnician(ctx context.Context, q repository.Queryer, techID uint64, limit, offset int) ([]*model.BookingAssignment, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []*model.BookingAssignment
+	for _, a := range f.assigns {
+		if a.TechnicianID == techID {
+			out = append(out, a)
+		}
+	}
+	return out, nil
+}
+func (f *fakeAssignStore) AttachJobRelations(ctx context.Context, q repository.Queryer, asg []*model.BookingAssignment) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, a := range asg {
+		if b, ok := f.bookings[a.BookingID]; ok {
+			a.Booking = b
+		}
+	}
+	return nil
+}
+func (f *fakeAssignStore) MarkAccepted(ctx context.Context, q repository.Queryer, id uint64, at time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.assigns[id].Status = model.AssignmentStatusAccepted
+	f.assigns[id].AcceptedAt = &at
+	return nil
+}
+func (f *fakeAssignStore) MarkRejected(ctx context.Context, q repository.Queryer, id uint64, at time.Time, reason string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.assigns[id].Status = model.AssignmentStatusRejected
+	f.assigns[id].RejectedAt = &at
+	f.assigns[id].RejectionReason = &reason
+	return nil
+}
+func (f *fakeAssignStore) MarkStarted(ctx context.Context, q repository.Queryer, id uint64, at time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.assigns[id].StartedAt = &at
+	return nil
+}
+func (f *fakeAssignStore) MarkCompleted(ctx context.Context, q repository.Queryer, id uint64, at time.Time, note string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.assigns[id].Status = model.AssignmentStatusCompleted
+	f.assigns[id].CompletedAt = &at
+	f.assigns[id].TechnicianNote = &note
+	return nil
+}
+
+// serAssignStore workflow delegates
+func (s *serAssignStore) FindWorkForUpdate(ctx context.Context, q repository.Queryer, id uint64) (*model.BookingAssignment, error) {
+	return s.inner.FindWorkForUpdate(ctx, q, id)
+}
+func (s *serAssignStore) FetchByID(ctx context.Context, q repository.Queryer, id uint64) (*model.BookingAssignment, error) {
+	return s.inner.FetchByID(ctx, q, id)
+}
+func (s *serAssignStore) CountByTechnician(ctx context.Context, q repository.Queryer, techID uint64) (int, error) {
+	return s.inner.CountByTechnician(ctx, q, techID)
+}
+func (s *serAssignStore) ListByTechnician(ctx context.Context, q repository.Queryer, techID uint64, l, o int) ([]*model.BookingAssignment, error) {
+	return s.inner.ListByTechnician(ctx, q, techID, l, o)
+}
+func (s *serAssignStore) AttachJobRelations(ctx context.Context, q repository.Queryer, asg []*model.BookingAssignment) error {
+	return s.inner.AttachJobRelations(ctx, q, asg)
+}
+func (s *serAssignStore) MarkAccepted(ctx context.Context, q repository.Queryer, id uint64, at time.Time) error {
+	return s.inner.MarkAccepted(ctx, q, id, at)
+}
+func (s *serAssignStore) MarkRejected(ctx context.Context, q repository.Queryer, id uint64, at time.Time, reason string) error {
+	return s.inner.MarkRejected(ctx, q, id, at, reason)
+}
+func (s *serAssignStore) MarkStarted(ctx context.Context, q repository.Queryer, id uint64, at time.Time) error {
+	return s.inner.MarkStarted(ctx, q, id, at)
+}
+func (s *serAssignStore) MarkCompleted(ctx context.Context, q repository.Queryer, id uint64, at time.Time, note string) error {
+	return s.inner.MarkCompleted(ctx, q, id, at, note)
+}

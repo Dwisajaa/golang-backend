@@ -63,6 +63,12 @@ func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphand
 	technician.Use(middleware.RequireRole(model.RoleTechnician))
 	technician.GET("/technician/profile", techProfile.Get)
 	technician.PUT("/technician/profile", techProfile.Update)
+	technician.GET("/technician/jobs", assignments.ListJobs)
+	technician.GET("/technician/jobs/:id", assignments.ShowJob)
+	technician.POST("/technician/jobs/:id/accept", assignments.Accept)
+	technician.POST("/technician/jobs/:id/reject", assignments.Reject)
+	technician.POST("/technician/jobs/:id/start", assignments.Start)
+	technician.POST("/technician/jobs/:id/complete", assignments.Complete)
 
 	// admin group mirrors Laravel's role:admin,super_admin group (catalog).
 	admin := api.Group("")
