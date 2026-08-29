@@ -12,7 +12,7 @@ import (
 // New assembles the Gin engine: global middleware then routes. It owns nothing
 // persistent; every dependency is passed in so tests can build a router from a
 // partial set of handlers.
-func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphandler.ReadyHandler, users *httphandler.UserHandler, auth *httphandler.AuthHandler, authMW gin.HandlerFunc, otp *httphandler.OtpHandler, profile *httphandler.ProfileHandler, customerProfile *httphandler.CustomerProfileHandler, techProfile *httphandler.TechnicianProfileHandler, categories *httphandler.ServiceCategoryHandler, services *httphandler.ServiceHandler, packages *httphandler.PackageHandler) *gin.Engine {
+func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphandler.ReadyHandler, users *httphandler.UserHandler, auth *httphandler.AuthHandler, authMW gin.HandlerFunc, otp *httphandler.OtpHandler, profile *httphandler.ProfileHandler, customerProfile *httphandler.CustomerProfileHandler, techProfile *httphandler.TechnicianProfileHandler, categories *httphandler.ServiceCategoryHandler, services *httphandler.ServiceHandler, packages *httphandler.PackageHandler, bookings *httphandler.BookingHandler) *gin.Engine {
 	r := gin.New()
 
 	r.Use(gin.Recovery())
@@ -48,6 +48,10 @@ func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphand
 	customer.Use(middleware.RequireRole(model.RoleCustomer))
 	customer.GET("/customer-profile", customerProfile.Get)
 	customer.PUT("/customer-profile", customerProfile.Update)
+	customer.GET("/bookings", bookings.List)
+	customer.POST("/bookings", bookings.Store)
+	customer.GET("/bookings/:id", bookings.Show)
+	customer.POST("/bookings/:id/cancel", bookings.Cancel)
 
 	// role:technician group mirrors Laravel's role:technician route group.
 	technician := api.Group("")
@@ -69,6 +73,7 @@ func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphand
 	admin.POST("/admin/packages", packages.Store)
 	admin.PUT("/admin/packages/:id", packages.Update)
 	admin.DELETE("/admin/packages/:id", packages.Destroy)
+	admin.GET("/admin/bookings", bookings.AdminList)
 
 	return r
 }

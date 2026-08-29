@@ -96,7 +96,14 @@ func main() {
 	packageService := service.NewPackageService(packageStore, serviceStore, db.NewTxManager(pool))
 	packageHandler := httphandler.NewPackageHandler(packageService)
 
-	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler, serviceHandler, packageHandler)
+	bookingStore := repository.NewMySQLBookingStore()
+	bookingService := service.NewBookingService(
+		bookingStore, repository.NewCatalogLookup(), repository.NewProfileLookup(pool),
+		db.NewTxManager(pool),
+	)
+	bookingHandler := httphandler.NewBookingHandler(bookingService)
+
+	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler, serviceHandler, packageHandler, bookingHandler)
 
 	addr := ":" + strconv.Itoa(cfg.App.Port)
 	srv := &http.Server{
