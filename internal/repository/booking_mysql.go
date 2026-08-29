@@ -327,3 +327,77 @@ func adminWhere(f AdminBookingFilters, args *[]any) string {
 	}
 	return strings.Join(clauses, " AND ")
 }
+
+// ---- Booking verify/completion (FASE 13) ----
+
+func (r *MySQLBookingStore) FindLatestAssignmentByStatus(ctx context.Context, q Queryer, bookingID uint64, status string) (*model.BookingAssignment, error) {
+	row := q.QueryRowContext(ctx,
+		"SELECT "+assignmentColumns+" FROM booking_assignments WHERE booking_id = ? AND status = ? ORDER BY id DESC LIMIT 1",
+		bookingID, status)
+	return scanAssignmentRow(row)
+}
+
+func (r *MySQLBookingStore) LockAssignmentForUpdate(ctx context.Context, q Queryer, id uint64) (*model.BookingAssignment, error) {
+	row := q.QueryRowContext(ctx, "SELECT "+assignmentColumns+" FROM booking_assignments WHERE id = ? FOR UPDATE", id)
+	return scanAssignmentRow(row)
+}
+
+func (r *MySQLBookingStore) UpdateAssignmentVerifiedNote(ctx context.Context, q Queryer, id uint64, note string) error {
+	_, err := q.ExecContext(ctx,
+		"UPDATE booking_assignments SET admin_verification_note = ?, updated_at = NOW() WHERE id = ?", note, id)
+	return err
+}
+
+func (r *MySQLBookingStore) RevertAssignmentCompleted(ctx context.Context, q Queryer, id uint64, note string) error {
+	_, err := q.ExecContext(ctx,
+		"UPDATE booking_assignments SET status = '"+model.AssignmentStatusAccepted+"', completed_at = NULL, admin_verification_note = ?, updated_at = NOW() WHERE id = ?",
+		note, id)
+	return err
+}
+
+// LoadBookingFull loads booking + customer + items + invoice + assignments
+// (with technician summaries) — the verify response envelope. Batch, no N+1.
+func (r *MySQLBookingStore) LoadBookingFull(ctx context.Context, q Queryer, id uint64) (*model.Booking, error) {
+	row := q.QueryRowContext(ctx, "SELECT "+bookingColumns+" FROM bookings WHERE id = ?", id)
+	b, err := scanBookingRow(row)
+	if err != nil {
+		return nil, err
+	}
+	// customer
+	crow := q.QueryRowContext(ctx, "SELECT id, name, email FROM users WHERE id = ?", b.CustomerID)
+	c := &model.User{}
+	if crow.Scan(&c.ID, &c.Name, &c.Email) == nil {
+		b.Customer = c
+	}
+	// items
+	if err := r.AttachItems(ctx, q, []*model.Booking{b}); err != nil {
+		return nil, err
+	}
+	// invoice
+	if err := r.AttachInvoices(ctx, q, []*model.Booking{b}); err != nil {
+		return nil, err
+	}
+	// assignments with technician (id,name)
+	rows, err := q.QueryContext(ctx,
+		"SELECT "+assignmentColumns+" FROM booking_assignments WHERE booking_id = ? ORDER BY id DESC", id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		a, err := scanAssignmentRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		trow := q.QueryRowContext(ctx, "SELECT id, name FROM users WHERE id = ?", a.TechnicianID)
+		tm := &model.User{}
+		if trow.Scan(&tm.ID, &tm.Name) == nil {
+			a.Technician = tm
+		}
+		b.Assignments = append(b.Assignments, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return b, nil
+}

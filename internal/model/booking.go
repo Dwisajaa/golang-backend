@@ -67,6 +67,8 @@ type Booking struct {
 	Invoice *Invoice
 	// Customer loaded by the assignment response (id, name, email).
 	Customer *User
+	// Assignments loaded by the verify response (latest_assignment).
+	Assignments []*BookingAssignment
 }
 
 // BookingItem mirrors booking_items. Snapshot fields: item_name, unit_price,

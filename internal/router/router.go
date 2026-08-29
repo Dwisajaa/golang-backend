@@ -84,6 +84,7 @@ func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphand
 	admin.PUT("/admin/packages/:id", packages.Update)
 	admin.DELETE("/admin/packages/:id", packages.Destroy)
 	admin.GET("/admin/bookings", bookings.AdminList)
+	admin.POST("/admin/bookings/:id/verify", bookings.VerifyCompletion)
 	admin.GET("/admin/payments", payments.AdminList)
 	admin.GET("/admin/payments/:id/proof", payments.ShowProofByID)
 	admin.POST("/admin/payments/:id/verify", payments.Verify)

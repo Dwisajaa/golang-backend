@@ -38,5 +38,6 @@ type BookingAssignment struct {
 	CreatedAt             *time.Time
 	UpdatedAt             *time.Time
 	// Loaded relations (assign response).
-	Booking *Booking
+	Booking    *Booking
+	Technician *User // technician summary (id, name) for latest_assignment
 }

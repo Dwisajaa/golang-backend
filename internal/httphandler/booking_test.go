@@ -207,3 +207,10 @@ func TestBookingInternalError(t *testing.T) {
 		t.Fatalf("expected 500, got %d", rec.Code)
 	}
 }
+
+func (s *stubBookingSvc) VerifyCompletion(ctx context.Context, bookingID uint64, action, note string) (*model.Booking, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.b, nil
+}

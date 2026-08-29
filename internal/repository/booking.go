@@ -31,6 +31,13 @@ type BookingStore interface {
 	// Code uniqueness
 	BookingCodeExists(ctx context.Context, q Queryer, code string) (bool, error)
 	InvoiceNumberExists(ctx context.Context, q Queryer, number string) (bool, error)
+
+	// Booking verify/completion (FASE 13)
+	FindLatestAssignmentByStatus(ctx context.Context, q Queryer, bookingID uint64, status string) (*model.BookingAssignment, error)
+	LockAssignmentForUpdate(ctx context.Context, q Queryer, id uint64) (*model.BookingAssignment, error)
+	UpdateAssignmentVerifiedNote(ctx context.Context, q Queryer, id uint64, note string) error
+	RevertAssignmentCompleted(ctx context.Context, q Queryer, id uint64, note string) error
+	LoadBookingFull(ctx context.Context, q Queryer, id uint64) (*model.Booking, error)
 }
 
 // AdminBookingFilters mirrors the admin booking list query parameters.

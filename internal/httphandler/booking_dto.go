@@ -108,22 +108,37 @@ func toCreateBookingInput(req createBookingRequest) service.CreateBookingInput {
 
 // bookingData mirrors BookingResource.
 type bookingData struct {
-	ID                uint64            `json:"id"`
-	BookingCode       string            `json:"booking_code"`
-	BookingDate       string            `json:"booking_date"`
-	BookingTime       string            `json:"booking_time"`
-	Address           string            `json:"address"`
-	AddressDetail     *string           `json:"address_detail"`
-	Latitude          *string           `json:"latitude"`
-	Longitude         *string           `json:"longitude"`
-	CustomerNote      *string           `json:"customer_note"`
-	AdditionalJobdesk *string           `json:"additional_jobdesk"`
-	Subtotal          string            `json:"subtotal"`
-	AdditionalCost    string            `json:"additional_cost"`
-	TotalPrice        string            `json:"total_price"`
-	Status            string            `json:"status"`
-	Items             []bookingItemData `json:"items"`
-	Invoice           *invoiceData      `json:"invoice"`
+	ID                uint64                `json:"id"`
+	BookingCode       string                `json:"booking_code"`
+	BookingDate       string                `json:"booking_date"`
+	BookingTime       string                `json:"booking_time"`
+	Address           string                `json:"address"`
+	AddressDetail     *string               `json:"address_detail"`
+	Latitude          *string               `json:"latitude"`
+	Longitude         *string               `json:"longitude"`
+	CustomerNote      *string               `json:"customer_note"`
+	AdditionalJobdesk *string               `json:"additional_jobdesk"`
+	Subtotal          string                `json:"subtotal"`
+	AdditionalCost    string                `json:"additional_cost"`
+	TotalPrice        string                `json:"total_price"`
+	Status            string                `json:"status"`
+	Items             []bookingItemData     `json:"items"`
+	Invoice           *invoiceData          `json:"invoice"`
+	Customer          *assignCustomer       `json:"customer,omitempty"`
+	LatestAssignment  *latestAssignmentData `json:"latest_assignment,omitempty"`
+}
+
+type latestAssignmentData struct {
+	ID          uint64          `json:"id"`
+	Status      string          `json:"status"`
+	AcceptedAt  timeMicro       `json:"accepted_at"`
+	CompletedAt timeMicro       `json:"completed_at"`
+	Technician  *assignTechInfo `json:"technician"`
+}
+
+type assignTechInfo struct {
+	ID   uint64 `json:"id"`
+	Name string `json:"name"`
 }
 
 type bookingItemData struct {
@@ -181,6 +196,18 @@ func toBookingData(b *model.Booking) bookingData {
 			TotalAmount:    centsToString(b.Invoice.TotalAmountCents),
 			Status:         b.Invoice.Status, Notes: b.Invoice.Notes,
 		}
+	}
+	if b.Customer != nil {
+		d.Customer = &assignCustomer{ID: b.Customer.ID, Name: b.Customer.Name, Email: b.Customer.Email}
+	}
+	if len(b.Assignments) > 0 {
+		latest := b.Assignments[0] // loaded id DESC → newest first
+		la := &latestAssignmentData{ID: latest.ID, Status: latest.Status,
+			AcceptedAt: timeMicro{t: latest.AcceptedAt}, CompletedAt: timeMicro{t: latest.CompletedAt}}
+		if latest.Technician != nil {
+			la.Technician = &assignTechInfo{ID: latest.Technician.ID, Name: latest.Technician.Name}
+		}
+		d.LatestAssignment = la
 	}
 	return d
 }

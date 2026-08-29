@@ -147,3 +147,91 @@ transitions; multi-write transaction (booking+item+invoice); code generation
 with retry (crypto/rand + unique constraint); side-effect boundary (invoice
 created inside tx; notification after commit); batch attach for N+1
 prevention; typed domain errors for conflict/forbidden.
+
+---
+
+# Booking Verification (FASE 13)
+
+## Laravel Audit
+**Endpoints:**
+- `POST /api/admin/bookings/{booking}/verify` (admin,super_admin) — new.
+- (Customer routes `GET/POST /api/bookings/{booking}/review` — Review domain,
+  not part of verification.)
+
+### Flow (Admin BookingController@verify)
+tx {
+  lock booking FOR UPDATE
+  → status != awaiting_verification
+     → 422 `{"booking":["Booking must be awaiting verification."]}`
+  → latest completed assignment; none
+     → 422 `{"booking":["No completed assignment is waiting for verification."]}`
+  → lock assignment FOR UPDATE
+  → approve: booking transitionTo(completed); assignment.admin_verification_note=note
+  → reject : booking transitionTo(in_progress);
+             assignment.status=accepted, completed_at=null, note=note
+} → booking.refresh() → notifications (DEFERRED) → 200
+
+### VerifyCompletionRequest
+`action` required `in[approve,reject]`; `admin_verification_note` nullable
+max1000, but **required (non-empty) when action=reject** (Indonesian message:
+`Catatan wajib diisi saat menolak penyelesaian pekerjaan.`).
+
+### Response (200)
+- approve → `"Penyelesaian booking disetujui."`
+- reject → `"Penyelesaian booking ditolak dan dikembalikan ke status sedang dikerjakan."`
+- `data` = BookingResource(booking fresh with customer, items, invoice,
+  assignments.technician → now includes `customer` + `latest_assignment`).
+
+## Latest Assignment (BookingResource)
+`latest_assignment` = newest assignment (id DESC) when the assignments relation
+is loaded: `{id, status, accepted_at, completed_at, technician{id,name}}`, else
+the key is omitted. `customer` similarly emitted only when loaded. Go mirrors
+with `omitempty` pointers (backward-compatible — existing endpoints unaffected).
+
+## State Machine
+Reuses `model.CanTransition`: `awaiting_verification → completed` (approve) and
+`awaiting_verification → in_progress` (reject) — both valid per the FASE 9 map.
+No new machine.
+
+## Transaction / Locking
+Single `TxManager` tx; canonical lock order **booking FOR UPDATE → assignment
+FOR UPDATE** (the assignment is re-locked for the write — Laravel does the
+same). No cycle with workflow (assignment-only) or admin-assign
+(booking-first) since no other path locks both.
+
+## Concurrency / Idempotency
+Concurrent verifies serialize on the booking lock → exactly one approve
+succeeds; the second observes `completed` → `"Booking must be awaiting
+verification."` 422 (Laravel parity). Unit race test emulates FOR UPDATE;
+integration test covers real transitions.
+
+## Authorization / Ownership
+Role: admin,super_admin (RequireRole). Identity from context. No ownership
+policy on booking (admin flows).
+
+## Parity
+
+| Item | Status |
+|---|---|
+| Endpoint / role | MATCH |
+| awaiting-verification + no-assignment guards (verbatim) | MATCH |
+| approve/reject cascade (booking + assignment note / revert) | MATCH |
+| Reject-note-required (Indonesian message) | MATCH |
+| Response messages + BookingResource (customer, latest_assignment) | MATCH |
+| State validation via CanTransition | INTENTIONAL IMPROVEMENT (guard; contract same) |
+| Notifications (verified / rejected / review reminder) | DEFERRED |
+| Review endpoints | DEFERRED (Review domain) |
+
+## Tests
+Service 8: approve/reject success (cascade + response assignments),
+wrong state, no completed assignment, not found, repo error 500, concurrent
+single-winner. Handler 8: approve (incl. latest_assignment present), reject
+(in_progress msg), reject-note-required 422, invalid action, business 422,
+401, 403, 500. Repository gated: latest-completed assignment, lock, verify
+updates, revert (accepted + completed_at null), LoadBookingFull envelope.
+Full regression PASS.
+
+## Known Limitations
+Notifications DEFERRED; review availability (Review domain) DEFERRED;
+`latest_assignment`/`customer` only rendered when relations loaded (Laravel
+parity); race-build linker OOM → GOMAXPROCS=1 (environmental).

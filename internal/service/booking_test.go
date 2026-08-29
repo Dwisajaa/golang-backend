@@ -11,13 +11,14 @@ import (
 )
 
 type fakeBookingStore struct {
-	byID      map[uint64]*model.Booking
-	created   []*model.Booking
-	items     []*model.BookingItem
-	invoices  []*model.Invoice
-	total     int
-	listItems []*model.Booking
-	err       error
+	byID                map[uint64]*model.Booking
+	created             []*model.Booking
+	items               []*model.BookingItem
+	invoices            []*model.Invoice
+	total               int
+	listItems           []*model.Booking
+	err                 error
+	latestAssignmentErr error
 }
 
 func newFakeBooking() *fakeBookingStore {
@@ -228,4 +229,33 @@ func TestBookingRepoError(t *testing.T) {
 	if he := httperr.As(err); he == nil || he.Kind != httperr.KindInternal {
 		t.Fatalf("expected 500: %v", err)
 	}
+}
+
+func (f *fakeBookingStore) FindLatestAssignmentByStatus(ctx context.Context, q repository.Queryer, bookingID uint64, status string) (*model.BookingAssignment, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.latestAssignmentErr != nil {
+		return nil, f.latestAssignmentErr
+	}
+	latest := &model.BookingAssignment{ID: 50, BookingID: bookingID, TechnicianID: 9, Status: status}
+	return latest, nil
+}
+func (f *fakeBookingStore) LockAssignmentForUpdate(ctx context.Context, q repository.Queryer, id uint64) (*model.BookingAssignment, error) {
+	return &model.BookingAssignment{ID: id, BookingID: 1, TechnicianID: 9, Status: model.AssignmentStatusCompleted}, nil
+}
+func (f *fakeBookingStore) UpdateAssignmentVerifiedNote(ctx context.Context, q repository.Queryer, id uint64, note string) error {
+	return f.err
+}
+func (f *fakeBookingStore) RevertAssignmentCompleted(ctx context.Context, q repository.Queryer, id uint64, note string) error {
+	return f.err
+}
+func (f *fakeBookingStore) LoadBookingFull(ctx context.Context, q repository.Queryer, id uint64) (*model.Booking, error) {
+	b, ok := f.byID[id]
+	if !ok {
+		return nil, repository.ErrNotFound
+	}
+	cp := *b
+	cp.Assignments = []*model.BookingAssignment{{ID: 50, Status: model.AssignmentStatusCompleted, Technician: &model.User{ID: 9, Name: "T"}}}
+	return &cp, nil
 }

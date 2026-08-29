@@ -21,6 +21,7 @@ type BookingService interface {
 	Create(ctx context.Context, userID uint64, in service.CreateBookingInput) (*model.Booking, error)
 	Cancel(ctx context.Context, userID, bookingID uint64) (*model.Booking, error)
 	AdminList(ctx context.Context, filters repository.AdminBookingFilters, page, perPage int) (*service.BookingList, error)
+	VerifyCompletion(ctx context.Context, bookingID uint64, action, note string) (*model.Booking, error)
 }
 
 type BookingHandler struct {
@@ -124,6 +125,58 @@ func (h *BookingHandler) AdminList(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, buildBookingPage(c, list))
+}
+
+// VerifyCompletion serves POST /api/admin/bookings/:id/verify.
+func (h *BookingHandler) VerifyCompletion(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	var req verifyCompletionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondError(c, httperr.BadRequest("Invalid JSON payload."))
+		return
+	}
+	action := strings.TrimSpace(req.Action)
+	if action != "approve" && action != "reject" {
+		respondError(c, httperr.Validation(map[string][]string{
+			"action": {"The selected action is invalid."},
+		}))
+		return
+	}
+	note := strings.TrimSpace(req.AdminVerificationNote)
+	if len(note) > 1000 {
+		respondError(c, httperr.Validation(map[string][]string{
+			"admin_verification_note": {"The admin verification note field must not be greater than 1000 characters."},
+		}))
+		return
+	}
+	if action == "reject" && note == "" {
+		respondError(c, httperr.Validation(map[string][]string{
+			"admin_verification_note": {"Catatan wajib diisi saat menolak penyelesaian pekerjaan."},
+		}))
+		return
+	}
+
+	b, err := h.service.VerifyCompletion(c.Request.Context(), id, action, note)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	message := "Penyelesaian booking disetujui."
+	if action == "reject" {
+		message = "Penyelesaian booking ditolak dan dikembalikan ke status sedang dikerjakan."
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"message": message,
+		"data":    toBookingData(b),
+	})
+}
+
+type verifyCompletionRequest struct {
+	Action                string `json:"action"`
+	AdminVerificationNote string `json:"admin_verification_note"`
 }
 
 func parsePagination(c *gin.Context) (int, int) {

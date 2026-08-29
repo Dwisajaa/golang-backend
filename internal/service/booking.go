@@ -30,6 +30,13 @@ type bookingStore interface {
 	AttachInvoices(ctx context.Context, q repository.Queryer, bookings []*model.Booking) error
 	BookingCodeExists(ctx context.Context, q repository.Queryer, code string) (bool, error)
 	InvoiceNumberExists(ctx context.Context, q repository.Queryer, number string) (bool, error)
+
+	// Booking verify/completion (FASE 13)
+	FindLatestAssignmentByStatus(ctx context.Context, q repository.Queryer, bookingID uint64, status string) (*model.BookingAssignment, error)
+	LockAssignmentForUpdate(ctx context.Context, q repository.Queryer, id uint64) (*model.BookingAssignment, error)
+	UpdateAssignmentVerifiedNote(ctx context.Context, q repository.Queryer, id uint64, note string) error
+	RevertAssignmentCompleted(ctx context.Context, q repository.Queryer, id uint64, note string) error
+	LoadBookingFull(ctx context.Context, q repository.Queryer, id uint64) (*model.Booking, error)
 }
 
 type catalogChecker interface {
@@ -322,6 +329,66 @@ func (s *BookingService) AdminList(ctx context.Context, filters repository.Admin
 		return nil, httperr.Internal(err)
 	}
 	return &out, nil
+}
+
+// VerifyCompletion mirrors Admin BookingController@verify: admin approves or
+// rejects a completed technician job, cascading booking + assignment states.
+func (s *BookingService) VerifyCompletion(ctx context.Context, bookingID uint64, action, note string) (*model.Booking, error) {
+	var full *model.Booking
+	err := s.tx.Within(ctx, func(tx *sql.Tx) error {
+		// Lock order: booking FOR UPDATE → assignment FOR UPDATE (canonical,
+		// no cycle with workflow/assign which lock assignment/booking alone).
+		b, err := s.bookings.FindByIDForUpdate(ctx, tx, bookingID)
+		if err != nil {
+			return err
+		}
+		if b.Status != model.BookingStatusAwaitingVerification {
+			return httperr.Validation(map[string][]string{"booking": {"Booking must be awaiting verification."}})
+		}
+		asg, err := s.bookings.FindLatestAssignmentByStatus(ctx, tx, bookingID, model.AssignmentStatusCompleted)
+		if err != nil {
+			if errors.Is(err, repository.ErrNotFound) {
+				return httperr.Validation(map[string][]string{"booking": {"No completed assignment is waiting for verification."}})
+			}
+			return err
+		}
+		if _, err := s.bookings.LockAssignmentForUpdate(ctx, tx, asg.ID); err != nil {
+			return err
+		}
+
+		if action == "approve" {
+			if !model.CanTransition(model.BookingStatusAwaitingVerification, model.BookingStatusCompleted) {
+				return httperr.Validation(map[string][]string{"booking": {"Invalid booking status transition."}})
+			}
+			if err := s.bookings.UpdateStatus(ctx, tx, bookingID, model.BookingStatusCompleted); err != nil {
+				return err
+			}
+			if err := s.bookings.UpdateAssignmentVerifiedNote(ctx, tx, asg.ID, note); err != nil {
+				return err
+			}
+		} else {
+			if !model.CanTransition(model.BookingStatusAwaitingVerification, model.BookingStatusInProgress) {
+				return httperr.Validation(map[string][]string{"booking": {"Invalid booking status transition."}})
+			}
+			if err := s.bookings.UpdateStatus(ctx, tx, bookingID, model.BookingStatusInProgress); err != nil {
+				return err
+			}
+			if err := s.bookings.RevertAssignmentCompleted(ctx, tx, asg.ID, note); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, mapBookingErr(err)
+	}
+	// Post-commit response envelope (customer + items + invoice + assignments).
+	_ = s.tx.Within(ctx, func(tx *sql.Tx) error {
+		full, err = s.bookings.LoadBookingFull(ctx, tx, bookingID)
+		return err
+	})
+	// Notifications (verified / rejected / review reminder): DEFERRED.
+	return full, nil
 }
 
 func (s *BookingService) generateBookingCode(ctx context.Context, tx *sql.Tx) (string, error) {
