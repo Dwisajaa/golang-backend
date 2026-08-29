@@ -112,7 +112,11 @@ func main() {
 	paymentService := service.NewPaymentService(repository.NewMySQLPaymentStore(), proofStorage, db.NewTxManager(pool))
 	paymentHandler := httphandler.NewPaymentHandler(paymentService, proofStorage)
 
-	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler, serviceHandler, packageHandler, bookingHandler, invoiceHandler, paymentHandler)
+	assignmentStore := repository.NewMySQLAssignmentStore()
+	assignmentService := service.NewAssignmentService(assignmentStore, db.NewTxManager(pool))
+	assignmentHandler := httphandler.NewAssignmentHandler(assignmentService)
+
+	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler, serviceHandler, packageHandler, bookingHandler, invoiceHandler, paymentHandler, assignmentHandler)
 
 	addr := ":" + strconv.Itoa(cfg.App.Port)
 	srv := &http.Server{

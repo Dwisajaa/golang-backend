@@ -65,6 +65,8 @@ type Booking struct {
 	// Loaded relations (nil when not eager-loaded).
 	Items   []*BookingItem
 	Invoice *Invoice
+	// Customer loaded by the assignment response (id, name, email).
+	Customer *User
 }
 
 // BookingItem mirrors booking_items. Snapshot fields: item_name, unit_price,
