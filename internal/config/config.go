@@ -21,6 +21,11 @@ type Config struct {
 type AppConfig struct {
 	Env  string // development | production | testing
 	Port int
+	// CORSAllowedOrigins is the comma-separated allowlist (env CORS_ALLOWED_ORIGINS).
+	// Empty disables CORS headers entirely.
+	CORSAllowedOrigins []string
+	// MaxJSONBodyBytes caps non-multipart JSON request bodies.
+	MaxJSONBodyBytes int64
 }
 
 type DatabaseConfig struct {
@@ -61,6 +66,7 @@ const (
 	defaultOtpExpiry   = 10
 	defaultOtpAttempts = 5
 	defaultProofPath   = "storage/app/private/payment-proofs"
+	defaultJSONBody    = 1 << 20 // 1 MiB
 )
 
 // Load reads environment variables and returns a validated Config. Required
@@ -91,8 +97,10 @@ func Load(getenv func(string) string) (*Config, error) {
 
 	cfg := &Config{
 		App: AppConfig{
-			Env:  firstNonEmpty(getenv("APP_ENV"), defaultAppEnv),
-			Port: appPort,
+			Env:                firstNonEmpty(getenv("APP_ENV"), defaultAppEnv),
+			Port:               appPort,
+			CORSAllowedOrigins: splitCSV(getenv("CORS_ALLOWED_ORIGINS")),
+			MaxJSONBodyBytes:   parseBytes(getenv("MAX_BODY_BYTES"), defaultJSONBody),
 		},
 		Database: DatabaseConfig{
 			Host:     getenv("DATABASE_HOST"),
@@ -151,6 +159,30 @@ func firstNonEmpty(v, fallback string) string {
 		return fallback
 	}
 	return v
+}
+
+// splitCSV splits a comma-separated allowlist, trimming entries.
+func splitCSV(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// parseBytes returns n or the fallback when unparsable/non-positive.
+func parseBytes(s string, fallback int64) int64 {
+	n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
 }
 
 // osGetenv is the production getenv function.

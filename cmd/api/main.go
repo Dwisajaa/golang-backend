@@ -126,13 +126,21 @@ func main() {
 	reviewService := service.NewReviewService(reviewStore, bookingStore, db.NewTxManager(pool), notifier)
 	reviewHandler := httphandler.NewReviewHandler(reviewService)
 
-	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler, serviceHandler, packageHandler, bookingHandler, invoiceHandler, paymentHandler, assignmentHandler, notificationHandler, reviewHandler)
+	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler, serviceHandler, packageHandler, bookingHandler, invoiceHandler, paymentHandler, assignmentHandler, notificationHandler, reviewHandler, router.Options{
+		AllowedOrigins: middleware.OriginAllowlist(cfg.App.CORSAllowedOrigins),
+		MaxJSONBody:    cfg.App.MaxJSONBodyBytes,
+		MaxUploadBody:  10 << 20, // 10 MiB: multipart payment proofs (proof itself capped at 2MB)
+	})
 
 	addr := ":" + strconv.Itoa(cfg.App.Port)
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           engine,
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1 MiB
 	}
 
 	go func() {
