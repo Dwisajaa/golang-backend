@@ -17,6 +17,7 @@ import (
 	"github.com/Dwisajaa/golang-backend/internal/httphandler"
 	"github.com/Dwisajaa/golang-backend/internal/mailer"
 	"github.com/Dwisajaa/golang-backend/internal/middleware"
+	"github.com/Dwisajaa/golang-backend/internal/notify"
 	"github.com/Dwisajaa/golang-backend/internal/repository"
 	"github.com/Dwisajaa/golang-backend/internal/router"
 	"github.com/Dwisajaa/golang-backend/internal/service"
@@ -98,9 +99,11 @@ func main() {
 	packageHandler := httphandler.NewPackageHandler(packageService)
 
 	bookingStore := repository.NewMySQLBookingStore()
+	notifStore := repository.NewMySQLNotificationStore()
+	notifier := notify.NewDBNotifier(notifStore, pool, logger)
 	bookingService := service.NewBookingService(
 		bookingStore, repository.NewCatalogLookup(), repository.NewProfileLookup(pool),
-		db.NewTxManager(pool),
+		db.NewTxManager(pool), notifier,
 	)
 	bookingHandler := httphandler.NewBookingHandler(bookingService)
 
@@ -109,14 +112,17 @@ func main() {
 	invoiceHandler := httphandler.NewInvoiceHandler(invoiceService)
 
 	proofStorage := storage.NewLocalStorage(cfg.Storage.PaymentProofsPath)
-	paymentService := service.NewPaymentService(repository.NewMySQLPaymentStore(), proofStorage, db.NewTxManager(pool))
+	paymentService := service.NewPaymentService(repository.NewMySQLPaymentStore(), proofStorage, db.NewTxManager(pool), notifier)
 	paymentHandler := httphandler.NewPaymentHandler(paymentService, proofStorage)
 
 	assignmentStore := repository.NewMySQLAssignmentStore()
-	assignmentService := service.NewAssignmentService(assignmentStore, db.NewTxManager(pool))
+	assignmentService := service.NewAssignmentService(assignmentStore, db.NewTxManager(pool), notifier)
 	assignmentHandler := httphandler.NewAssignmentHandler(assignmentService)
 
-	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler, serviceHandler, packageHandler, bookingHandler, invoiceHandler, paymentHandler, assignmentHandler)
+	notificationService := service.NewNotificationService(notifStore, db.NewTxManager(pool))
+	notificationHandler := httphandler.NewNotificationHandler(notificationService)
+
+	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler, serviceHandler, packageHandler, bookingHandler, invoiceHandler, paymentHandler, assignmentHandler, notificationHandler)
 
 	addr := ":" + strconv.Itoa(cfg.App.Port)
 	srv := &http.Server{

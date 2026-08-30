@@ -11,6 +11,7 @@ import (
 
 	"github.com/Dwisajaa/golang-backend/internal/httperr"
 	"github.com/Dwisajaa/golang-backend/internal/model"
+	"github.com/Dwisajaa/golang-backend/internal/notify"
 	"github.com/Dwisajaa/golang-backend/internal/repository"
 )
 
@@ -54,10 +55,15 @@ type BookingService struct {
 	catalog  catalogChecker
 	profile  profileChecker
 	tx       txRunner
+	notify   notify.Notifier
 }
 
-func NewBookingService(bookings bookingStore, catalog catalogChecker, profile profileChecker, tx txRunner) *BookingService {
-	return &BookingService{bookings: bookings, catalog: catalog, profile: profile, tx: tx}
+func NewBookingService(bookings bookingStore, catalog catalogChecker, profile profileChecker, tx txRunner, notify ...notify.Notifier) *BookingService {
+	s := &BookingService{bookings: bookings, catalog: catalog, profile: profile, tx: tx}
+	if len(notify) > 0 {
+		s.notify = notify[0]
+	}
+	return s
 }
 
 // BookingList is the paginated result.
@@ -254,7 +260,17 @@ func (s *BookingService) Create(ctx context.Context, userID uint64, in CreateBoo
 	if err != nil {
 		return nil, mapBookingErr(err)
 	}
-	// Notification side-effect: DEFERRED (NotificationService not wired)
+	// Post-commit notification to admins (booking_created).
+	if s.notify != nil && out != nil && out.Invoice != nil {
+		id := out.ID
+		s.notify.NotifyAdmins(ctx, model.SystemNotification{
+			Event:     "booking_created",
+			Title:     "New booking created",
+			Message:   "Booking " + out.BookingCode + " is awaiting payment.",
+			BookingID: &id,
+			InvoiceID: &out.Invoice.ID,
+		})
+	}
 	return out, nil
 }
 
@@ -387,7 +403,32 @@ func (s *BookingService) VerifyCompletion(ctx context.Context, bookingID uint64,
 		full, err = s.bookings.LoadBookingFull(ctx, tx, bookingID)
 		return err
 	})
-	// Notifications (verified / rejected / review reminder): DEFERRED.
+	// Post-commit notifications to the customer.
+	if s.notify != nil && full != nil {
+		id := full.ID
+		if action == "approve" {
+			s.notify.NotifyUser(ctx, full.CustomerID, model.SystemNotification{
+				Event:     "job_completed_verified",
+				Title:     "Pekerjaan selesai & terverifikasi",
+				Message:   "Booking " + full.BookingCode + " telah dinyatakan selesai.",
+				BookingID: &id,
+			})
+			// review_reminder — parity condition: no review exists yet.
+			s.notify.NotifyUser(ctx, full.CustomerID, model.SystemNotification{
+				Event:     "review_reminder",
+				Title:     "Bagaimana pengalaman Anda?",
+				Message:   "Beri rating untuk booking " + full.BookingCode + ".",
+				BookingID: &id,
+			})
+		} else {
+			s.notify.NotifyUser(ctx, full.CustomerID, model.SystemNotification{
+				Event:     "job_completion_rejected",
+				Title:     "Perlu tindak lanjut",
+				Message:   "Penyelesaian booking " + full.BookingCode + " perlu ditinjau ulang.",
+				BookingID: &id,
+			})
+		}
+	}
 	return full, nil
 }
 

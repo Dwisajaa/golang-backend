@@ -12,7 +12,7 @@ import (
 // New assembles the Gin engine: global middleware then routes. It owns nothing
 // persistent; every dependency is passed in so tests can build a router from a
 // partial set of handlers.
-func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphandler.ReadyHandler, users *httphandler.UserHandler, auth *httphandler.AuthHandler, authMW gin.HandlerFunc, otp *httphandler.OtpHandler, profile *httphandler.ProfileHandler, customerProfile *httphandler.CustomerProfileHandler, techProfile *httphandler.TechnicianProfileHandler, categories *httphandler.ServiceCategoryHandler, services *httphandler.ServiceHandler, packages *httphandler.PackageHandler, bookings *httphandler.BookingHandler, invoices *httphandler.InvoiceHandler, payments *httphandler.PaymentHandler, assignments *httphandler.AssignmentHandler) *gin.Engine {
+func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphandler.ReadyHandler, users *httphandler.UserHandler, auth *httphandler.AuthHandler, authMW gin.HandlerFunc, otp *httphandler.OtpHandler, profile *httphandler.ProfileHandler, customerProfile *httphandler.CustomerProfileHandler, techProfile *httphandler.TechnicianProfileHandler, categories *httphandler.ServiceCategoryHandler, services *httphandler.ServiceHandler, packages *httphandler.PackageHandler, bookings *httphandler.BookingHandler, invoices *httphandler.InvoiceHandler, payments *httphandler.PaymentHandler, assignments *httphandler.AssignmentHandler, notifications *httphandler.NotificationHandler) *gin.Engine {
 	r := gin.New()
 
 	r.Use(gin.Recovery())
@@ -41,6 +41,9 @@ func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphand
 	protected.GET("/profile", profile.Get)
 	protected.PUT("/profile", profile.Update)
 	protected.PUT("/profile/password", profile.UpdatePassword)
+	protected.GET("/notifications", notifications.List)
+	protected.POST("/notifications/read-all", notifications.ReadAll)
+	protected.POST("/notifications/:id/read", notifications.Read)
 
 	// role:customer group mirrors Laravel's role:customer route group.
 	customer := api.Group("")

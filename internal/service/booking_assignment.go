@@ -8,6 +8,7 @@ import (
 
 	"github.com/Dwisajaa/golang-backend/internal/httperr"
 	"github.com/Dwisajaa/golang-backend/internal/model"
+	"github.com/Dwisajaa/golang-backend/internal/notify"
 	"github.com/Dwisajaa/golang-backend/internal/repository"
 )
 
@@ -35,10 +36,15 @@ type assignmentStore interface {
 type AssignmentService struct {
 	assignments assignmentStore
 	tx          txRunner
+	notify      notify.Notifier
 }
 
-func NewAssignmentService(assignments assignmentStore, tx txRunner) *AssignmentService {
-	return &AssignmentService{assignments: assignments, tx: tx}
+func NewAssignmentService(assignments assignmentStore, tx txRunner, notify ...notify.Notifier) *AssignmentService {
+	s := &AssignmentService{assignments: assignments, tx: tx}
+	if len(notify) > 0 {
+		s.notify = notify[0]
+	}
+	return s
 }
 
 // Assign mirrors Admin AssignmentController@assign.
@@ -102,7 +108,17 @@ func (s *AssignmentService) Assign(ctx context.Context, adminID, bookingID, tech
 	if err != nil {
 		return nil, mapAssignmentErr(err)
 	}
-	// Notification to technician: DEFERRED (Notification domain not wired).
+	// Post-commit notification to the technician (assignment_created).
+	if s.notify != nil && out != nil && out.Booking != nil {
+		bk := out.BookingID
+		ai := out.ID
+		s.notify.NotifyUser(ctx, out.TechnicianID, model.SystemNotification{
+			Event:     "assignment_created",
+			Title:     "New job assignment",
+			Message:   "You have been assigned booking " + out.Booking.BookingCode + ".",
+			BookingID: &bk, AssignmentID: &ai,
+		})
+	}
 	return out, nil
 }
 
@@ -214,6 +230,16 @@ func (s *AssignmentService) Accept(ctx context.Context, technicianID, assignment
 		return nil, mapAssignmentErr(err)
 	}
 	_ = s.loadForResponse(ctx, out)
+	// Post-commit notification to admins (assignment_accepted).
+	if s.notify != nil && out != nil && out.Booking != nil {
+		bk := out.BookingID
+		ai := out.ID
+		s.notify.NotifyAdmins(ctx, model.SystemNotification{
+			Event: "assignment_accepted", Title: "Assignment accepted",
+			Message:   "Technician accepted booking " + out.Booking.BookingCode + ".",
+			BookingID: &bk, AssignmentID: &ai,
+		})
+	}
 	return out, nil
 }
 
@@ -259,6 +285,16 @@ func (s *AssignmentService) Reject(ctx context.Context, technicianID, assignment
 		return nil, mapAssignmentErr(err)
 	}
 	_ = s.loadForResponse(ctx, out)
+	// Post-commit notification to admins (assignment_rejected).
+	if s.notify != nil && out != nil && out.Booking != nil {
+		bk := out.BookingID
+		ai := out.ID
+		s.notify.NotifyAdmins(ctx, model.SystemNotification{
+			Event: "assignment_rejected", Title: "Assignment rejected",
+			Message:   "Technician rejected booking " + out.Booking.BookingCode + ".",
+			BookingID: &bk, AssignmentID: &ai,
+		})
+	}
 	return out, nil
 }
 
@@ -298,6 +334,16 @@ func (s *AssignmentService) Start(ctx context.Context, technicianID, assignmentI
 		return nil, mapAssignmentErr(err)
 	}
 	_ = s.loadForResponse(ctx, out)
+	// Post-commit notification to the customer (job_started).
+	if s.notify != nil && out != nil && out.Booking != nil {
+		bk := out.BookingID
+		ai := out.ID
+		s.notify.NotifyUser(ctx, out.Booking.CustomerID, model.SystemNotification{
+			Event: "job_started", Title: "Job started",
+			Message:   "Work has started for booking " + out.Booking.BookingCode + ".",
+			BookingID: &bk, AssignmentID: &ai,
+		})
+	}
 	return out, nil
 }
 
@@ -339,6 +385,21 @@ func (s *AssignmentService) Complete(ctx context.Context, technicianID, assignme
 		return nil, mapAssignmentErr(err)
 	}
 	_ = s.loadForResponse(ctx, out)
+	// Post-commit notifications (job_completed): admins + customer.
+	if s.notify != nil && out != nil && out.Booking != nil {
+		bk := out.BookingID
+		ai := out.ID
+		s.notify.NotifyAdmins(ctx, model.SystemNotification{
+			Event: "job_completed", Title: "Job completed",
+			Message:   "Booking " + out.Booking.BookingCode + " is awaiting verification.",
+			BookingID: &bk, AssignmentID: &ai,
+		})
+		s.notify.NotifyUser(ctx, out.Booking.CustomerID, model.SystemNotification{
+			Event: "job_completed", Title: "Job completed",
+			Message:   "Work for booking " + out.Booking.BookingCode + " has been completed.",
+			BookingID: &bk, AssignmentID: &ai,
+		})
+	}
 	return out, nil
 }
 

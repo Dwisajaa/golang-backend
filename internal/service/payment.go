@@ -12,6 +12,7 @@ import (
 
 	"github.com/Dwisajaa/golang-backend/internal/httperr"
 	"github.com/Dwisajaa/golang-backend/internal/model"
+	"github.com/Dwisajaa/golang-backend/internal/notify"
 	"github.com/Dwisajaa/golang-backend/internal/repository"
 	"github.com/Dwisajaa/golang-backend/internal/storage"
 )
@@ -34,16 +35,21 @@ type paymentStore interface {
 }
 
 // PaymentService orchestrates the payment flows: customer upload, customer
-// proof download, admin list/proof/verify/reject — with state cascades and
+// proof download, admin list/proof/verify/reject â€” with state cascades and
 // private storage.
 type PaymentService struct {
 	payments paymentStore
 	storage  storage.Storage
 	tx       txRunner
+	notify   notify.Notifier
 }
 
-func NewPaymentService(pay paymentStore, st storage.Storage, tx txRunner) *PaymentService {
-	return &PaymentService{payments: pay, storage: st, tx: tx}
+func NewPaymentService(pay paymentStore, st storage.Storage, tx txRunner, notify ...notify.Notifier) *PaymentService {
+	s := &PaymentService{payments: pay, storage: st, tx: tx}
+	if len(notify) > 0 {
+		s.notify = notify[0]
+	}
+	return s
 }
 
 // PaymentList is the paginated admin payment list.
@@ -76,6 +82,8 @@ func (s *PaymentService) UploadProof(ctx context.Context, customerID, invoiceID 
 
 	var proofKey string
 	var storedFile *model.Payment
+	var notifyBookingID, notifyInvoiceID uint64
+	var notifyInvoiceNumber string
 
 	err := s.tx.Within(ctx, func(tx *sql.Tx) error {
 		locked, err := s.payments.FindInvoiceForUpdate(ctx, tx, invoiceID)
@@ -134,6 +142,9 @@ func (s *PaymentService) UploadProof(ctx context.Context, customerID, invoiceID 
 		}
 		proofKey = key
 		storedFile = p
+		notifyBookingID = locked.Booking.ID
+		notifyInvoiceID = locked.ID
+		notifyInvoiceNumber = locked.InvoiceNumber
 		return nil
 	})
 	if err != nil {
@@ -144,13 +155,21 @@ func (s *PaymentService) UploadProof(ctx context.Context, customerID, invoiceID 
 	}
 	if proofKey != "" {
 		// post-commit file write; failure keeps the DB row but the proof is
-		// missing — matches the observable contract (proof_available=false yet)
+		// missing â€” matches the observable contract (proof_available=false yet)
 		// and avoids holding a DB transaction during I/O.
 		if err := s.storage.Save(proofKey, in.ProofFile); err != nil {
 			return nil, httperr.Internal(err)
 		}
 	}
-	// Notification to admins: DEFERRED (Notification domain not wired).
+	// Post-commit notification to admins (payment_proof_submitted).
+	if s.notify != nil && storedFile != nil && notifyInvoiceNumber != "" {
+		s.notify.NotifyAdmins(ctx, model.SystemNotification{
+			Event:     "payment_proof_submitted",
+			Title:     "Payment proof submitted",
+			Message:   "Payment proof for invoice " + notifyInvoiceNumber + " is awaiting verification.",
+			BookingID: &notifyBookingID, InvoiceID: &notifyInvoiceID, PaymentID: &storedFile.ID,
+		})
+	}
 	return storedFile, nil
 }
 
@@ -251,7 +270,7 @@ func (s *PaymentService) AdminList(ctx context.Context, status string, page, per
 }
 
 // Verify mirrors Admin PaymentController@verify: lock, validate, then cascade
-// payment→invoice→booking (paid→confirmed).
+// paymentâ†’invoiceâ†’booking (paidâ†’confirmed).
 func (s *PaymentService) Verify(ctx context.Context, adminID, paymentID uint64) (*model.Payment, error) {
 	var out *model.Payment
 	err := s.tx.Within(ctx, func(tx *sql.Tx) error {
@@ -306,7 +325,18 @@ func (s *PaymentService) Verify(ctx context.Context, adminID, paymentID uint64) 
 		out = p
 		return nil
 	})
-	// Notification to customer: DEFERRED.
+	// Post-commit notification to customer (payment_verified).
+	if s.notify != nil && out != nil && out.Invoice != nil && out.Invoice.Booking != nil {
+		bk := out.Invoice.BookingID
+		iv := out.InvoiceID
+		py := out.ID
+		s.notify.NotifyUser(ctx, out.Invoice.Booking.CustomerID, model.SystemNotification{
+			Event:     "payment_verified",
+			Title:     "Payment verified",
+			Message:   "Your payment has been verified and the booking is confirmed.",
+			BookingID: &bk, InvoiceID: &iv, PaymentID: &py,
+		})
+	}
 	return out, nil
 }
 
@@ -352,7 +382,18 @@ func (s *PaymentService) Reject(ctx context.Context, adminID, paymentID uint64, 
 		out = p
 		return nil
 	})
-	// Notification to customer: DEFERRED.
+	// Post-commit notification to customer (payment_rejected).
+	if s.notify != nil && out != nil && out.Invoice != nil && out.Invoice.Booking != nil {
+		bk := out.Invoice.BookingID
+		iv := out.InvoiceID
+		py := out.ID
+		s.notify.NotifyUser(ctx, out.Invoice.Booking.CustomerID, model.SystemNotification{
+			Event:     "payment_rejected",
+			Title:     "Payment rejected",
+			Message:   "Your payment proof was rejected. Please submit a new proof.",
+			BookingID: &bk, InvoiceID: &iv, PaymentID: &py,
+		})
+	}
 	return out, nil
 }
 
@@ -374,7 +415,7 @@ func (s *PaymentService) proofExists(p *model.Payment) bool {
 	return err == nil && ok
 }
 
-// newProofKey mirrors Laravel: "payment-proof-{uuid}.{ext}" — uuid replaced by
+// newProofKey mirrors Laravel: "payment-proof-{uuid}.{ext}" â€” uuid replaced by
 // crypto/rand hex (no uuid dependency needed).
 func (s *PaymentService) newProofKey(filename string) (string, error) {
 	ext := ""
