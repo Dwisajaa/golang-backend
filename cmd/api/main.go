@@ -122,7 +122,11 @@ func main() {
 	notificationService := service.NewNotificationService(notifStore, db.NewTxManager(pool))
 	notificationHandler := httphandler.NewNotificationHandler(notificationService)
 
-	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler, serviceHandler, packageHandler, bookingHandler, invoiceHandler, paymentHandler, assignmentHandler, notificationHandler)
+	reviewStore := repository.NewMySQLReviewStore()
+	reviewService := service.NewReviewService(reviewStore, bookingStore, db.NewTxManager(pool), notifier)
+	reviewHandler := httphandler.NewReviewHandler(reviewService)
+
+	engine := router.New(logger, health, ready, users, authHandler, authMW, otpHandler, profileHandler, customerProfileHandler, techProfileHandler, categoryHandler, serviceHandler, packageHandler, bookingHandler, invoiceHandler, paymentHandler, assignmentHandler, notificationHandler, reviewHandler)
 
 	addr := ":" + strconv.Itoa(cfg.App.Port)
 	srv := &http.Server{

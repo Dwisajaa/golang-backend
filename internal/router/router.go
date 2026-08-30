@@ -12,7 +12,7 @@ import (
 // New assembles the Gin engine: global middleware then routes. It owns nothing
 // persistent; every dependency is passed in so tests can build a router from a
 // partial set of handlers.
-func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphandler.ReadyHandler, users *httphandler.UserHandler, auth *httphandler.AuthHandler, authMW gin.HandlerFunc, otp *httphandler.OtpHandler, profile *httphandler.ProfileHandler, customerProfile *httphandler.CustomerProfileHandler, techProfile *httphandler.TechnicianProfileHandler, categories *httphandler.ServiceCategoryHandler, services *httphandler.ServiceHandler, packages *httphandler.PackageHandler, bookings *httphandler.BookingHandler, invoices *httphandler.InvoiceHandler, payments *httphandler.PaymentHandler, assignments *httphandler.AssignmentHandler, notifications *httphandler.NotificationHandler) *gin.Engine {
+func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphandler.ReadyHandler, users *httphandler.UserHandler, auth *httphandler.AuthHandler, authMW gin.HandlerFunc, otp *httphandler.OtpHandler, profile *httphandler.ProfileHandler, customerProfile *httphandler.CustomerProfileHandler, techProfile *httphandler.TechnicianProfileHandler, categories *httphandler.ServiceCategoryHandler, services *httphandler.ServiceHandler, packages *httphandler.PackageHandler, bookings *httphandler.BookingHandler, invoices *httphandler.InvoiceHandler, payments *httphandler.PaymentHandler, assignments *httphandler.AssignmentHandler, notifications *httphandler.NotificationHandler, reviews *httphandler.ReviewHandler) *gin.Engine {
 	r := gin.New()
 
 	r.Use(gin.Recovery())
@@ -59,6 +59,8 @@ func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphand
 	customer.GET("/invoices/:id", invoices.Show)
 	customer.POST("/invoices/:id/payment-proof", payments.StoreProof)
 	customer.GET("/invoices/:id/payment-proof", payments.ShowProofByInvoice)
+	customer.GET("/bookings/:id/review", reviews.Show)
+	customer.POST("/bookings/:id/review", reviews.Store)
 
 	// role:technician group mirrors Laravel's role:technician route group.
 	technician := api.Group("")
@@ -92,6 +94,8 @@ func New(logger *slog.Logger, health *httphandler.HealthHandler, ready *httphand
 	admin.GET("/admin/payments/:id/proof", payments.ShowProofByID)
 	admin.POST("/admin/payments/:id/verify", payments.Verify)
 	admin.POST("/admin/payments/:id/reject", payments.Reject)
+	admin.GET("/admin/reviews", reviews.AdminList)
+	admin.POST("/admin/reviews/:id/moderate", reviews.Moderate)
 	admin.POST("/admin/bookings/:id/assign", assignments.Assign)
 
 	return r
