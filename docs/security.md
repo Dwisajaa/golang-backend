@@ -47,6 +47,11 @@ In-memory fixed-window per IP (mutex-safe), mirrors Laravel ThrottleRequests:
 429 body `{"message":"Too many requests. Please try again later."}` +
 Retry-After. Single-instance; distributed limiting DEFERRED to production.
 
+**Trusted proxy model** (FASE 18): rate limiter / `ClientIP` trust only
+`TRUSTED_PROXIES` (default `127.0.0.1`); `*` opts into trusting all proxies.
+With no proxy, ClientIP falls back to `RemoteAddr` — an arbitrary client cannot
+spoof `X-Forwarded-For` to bypass a limiter.
+
 ## 8. Request Limits — IMPLEMENTED (NEW)
 `LimitBody`: JSON groups capped 1 MiB; customer group (multipart) 10 MiB
 (built on http.MaxBytesReader before parsing). Payment proof additionally

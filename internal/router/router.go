@@ -13,8 +13,9 @@ import (
 // Options carries application-security tuning for the router.
 type Options struct {
 	AllowedOrigins map[string]bool
-	MaxJSONBody    int64 // strict cap for JSON-only groups
-	MaxUploadBody  int64 // cap for the customer group (multipart payment proofs)
+	MaxJSONBody    int64    // strict cap for JSON-only groups
+	MaxUploadBody  int64    // cap for the customer group (multipart payment proofs)
+	TrustedProxies []string // reverse proxies whose X-Forwarded-For we trust
 }
 
 const (
@@ -52,6 +53,25 @@ func New(
 	sec Options,
 ) *gin.Engine {
 	r := gin.New()
+
+	trustAll := false
+	var trust []string
+	for _, p := range sec.TrustedProxies {
+		if p == "*" {
+			trustAll = true
+			break
+		}
+		trust = append(trust, p)
+	}
+	switch {
+	case trustAll:
+		r.SetTrustedProxies([]string{"0.0.0.0/0", "::/0"})
+	case len(trust) > 0:
+		r.SetTrustedProxies(trust)
+	default:
+		// No trusted proxy → ClientIP falls back to RemoteAddr (impersonation-proof).
+		r.SetTrustedProxies([]string{})
+	}
 
 	// Outermost: panic → generic JSON 500, never a stack trace.
 	r.Use(middleware.JSONRecovery(logger))

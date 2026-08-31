@@ -130,6 +130,7 @@ func main() {
 		AllowedOrigins: middleware.OriginAllowlist(cfg.App.CORSAllowedOrigins),
 		MaxJSONBody:    cfg.App.MaxJSONBodyBytes,
 		MaxUploadBody:  10 << 20, // 10 MiB: multipart payment proofs (proof itself capped at 2MB)
+		TrustedProxies: cfg.App.TrustedProxies,
 	})
 
 	addr := ":" + strconv.Itoa(cfg.App.Port)

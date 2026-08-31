@@ -1,0 +1,30 @@
+# systemd unit for running the Go API as a non-container service.
+# Place at /etc/systemd/system/api-dwidev.service, fill Environment values,
+# then: systemctl daemon-reload && systemctl enable --now api-dwidev
+
+[Unit]
+Description=api-dwidev Go API
+After=network.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/api-dwidev
+ExecStart=/opt/api-dwidev/api
+Restart=always
+RestartSec=3
+
+# Secrets come from the environment file (0600), never from the unit.
+EnvironmentFile=/etc/api-dwidev.env
+
+# basic safeguards
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/api-dwidev/storage
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -100,4 +100,13 @@ assign/verify cannot cycle with the assignment-only workflow.
 ## Configuration
 
 `.env.example` documents: APP_ENV/APP_PORT, DATABASE_*, OTP_*, SMTP_*,
-STORAGE_PAYMENT_PROOFS_PATH. No secrets committed; `.env*` git-ignored.
+STORAGE_PAYMENT_PROOFS_PATH, CORS_ALLOWED_ORIGINS, MAX_BODY_BYTES,
+TRUSTED_PROXIES. No secrets committed; `.env*` git-ignored.
+
+## Production (FASE 18)
+
+`Dockerfile` (multi-stage → distroless nonroot), `deploy/` nginx/systemd/compose
+templates, CI (`fmt/vet/build/test/race`), and `docs/production-*.md` /
+`deployment.md` / `backup-and-recovery.md` cover the run book. The router sets
+Gin trusted proxies from `TRUSTED_PROXIES` (default 127.0.0.1) so the rate
+limiter's ClientIP cannot be spoofed by arbitrary clients.

@@ -1,0 +1,11 @@
+.git
+.gitignore
+.env
+.env.*
+docs/
+tests/
+*.log
+tmp/
+Dockerfile
+.dockerignore
+deploy/

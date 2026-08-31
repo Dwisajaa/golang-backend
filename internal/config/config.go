@@ -26,6 +26,10 @@ type AppConfig struct {
 	CORSAllowedOrigins []string
 	// MaxJSONBodyBytes caps non-multipart JSON request bodies.
 	MaxJSONBodyBytes int64
+	// TrustedProxies is the comma-separated reverse-proxy trust list
+	// (env TRUSTED_PROXIES, default 127.0.0.1). Used to bound which
+	// X-Forwarded-For values the rate limiter / ClientIP trusts.
+	TrustedProxies []string
 }
 
 type DatabaseConfig struct {
@@ -101,6 +105,7 @@ func Load(getenv func(string) string) (*Config, error) {
 			Port:               appPort,
 			CORSAllowedOrigins: splitCSV(getenv("CORS_ALLOWED_ORIGINS")),
 			MaxJSONBodyBytes:   parseBytes(getenv("MAX_BODY_BYTES"), defaultJSONBody),
+			TrustedProxies:     defaultIfEmpty(splitCSV(getenv("TRUSTED_PROXIES")), []string{"127.0.0.1"}),
 		},
 		Database: DatabaseConfig{
 			Host:     getenv("DATABASE_HOST"),
@@ -183,6 +188,14 @@ func parseBytes(s string, fallback int64) int64 {
 		return fallback
 	}
 	return n
+}
+
+// defaultIfEmpty returns fallback when v has no entries.
+func defaultIfEmpty(v, fallback []string) []string {
+	if len(v) == 0 {
+		return fallback
+	}
+	return v
 }
 
 // osGetenv is the production getenv function.

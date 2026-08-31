@@ -1,0 +1,32 @@
+# Production reference compose (API only; MySQL managed externally or a
+# separate service with its own port exposure firewall). Secrets via --env-file,
+# never hardcoded here.
+#
+# Usage: docker compose --env-file /etc/api-dwidev.env -f compose.prod.yaml up -d
+
+services:
+  api:
+    build: .
+    image: api-dwidev:latest
+    restart: unless-stopped
+    user: "65532:65532" # distroless nonroot
+    ports:
+      - "127.0.0.1:8080:8080"
+    env_file:
+      - ${API_ENV_FILE:-/etc/api-dwidev.env}
+    volumes:
+      - payment-proofs:/app/storage/app/private/payment-proofs
+    # Health/readiness are probed externally (nginx/host): GET /health, GET /ready
+
+  migrate:
+    build: .
+    image: api-dwidev:latest
+    restart: "no"
+    env_file:
+      - ${API_ENV_FILE:-/etc/api-dwidev.env}
+    entrypoint: ["/app/migrate"]
+    depends_on:
+      - api
+
+volumes:
+  payment-proofs:
